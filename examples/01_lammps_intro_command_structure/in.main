@@ -1,18 +1,26 @@
 # ============================================================
-# Example: LAMMPS input-script structure
+# Example 01: LAMMPS command structure
 # ============================================================
 #
 # Aim:
-#   Learn the basic command grammar:
+#   Make the common LAMMPS grammar explicit:
 #
 #       command ID group-ID style arguments
 #
-#   Examples:
-#       group   GA type 1
-#       fix     FNVT all nvt temp 1.0 1.0 0.5
-#       dump    DALL all custom 1000 file.lammpstrj id type x y z
+#   Typical examples:
+#       group   G1   type 1
+#       fix     FNVE all  nve
+#       dump    DALL all  custom 100 file.lammpstrj id type x y z
 #
-# This example reads the initial configuration from a data file.
+#   Not every command has all fields, but many commands follow this
+#   pattern closely. The important idea is that IDs are handles used
+#   later by other commands, by output, or by cleanup commands.
+#
+# Naming convention in these examples:
+#   G...  groups
+#   F...  fixes
+#   C...  computes
+#   D...  dumps
 #
 # ============================================================
 
@@ -20,10 +28,15 @@
 # 1. Global simulation setup
 # -------------------------
 
+# Same global setup as Example 00.
 units           lj
 dimension       3
 boundary        p p p
 atom_style      atomic
+
+# -------------------------
+# 2. Parameters and files
+# -------------------------
 
 variable        temp equal 1.0
 variable        seed equal 12345
@@ -46,25 +59,28 @@ variable        fdump_g1 string o.dump.g1.lammpstrj
 
 log             ${flog}
 
+# Read the same two-component LJ system used in Example 00.
 read_data       ${fdata_in}
 
 # -------------------------
-# 2. Define atom groups
+# 3. Groups
 # -------------------------
 #
-# Syntax:
-#   group group-ID style args
+# group command grammar:
+#   group group-ID style arguments
 #
-# The group-ID is then used by fixes, computes, dumps, velocities, etc.
+# Here, groups select atoms by atom type. The group IDs G1 and G2
+# are later used in dumps or could be used in fixes/computes.
 
 group           G1 type 1
 group           G2 type 2
 
+# LAMMPS variable expansion can be used inside print statements.
 print           "Number of G1 atoms = $(count(G1))"
 print           "Number of G2 atoms = $(count(G2))"
 
 # -------------------------
-# 3. Define interactions
+# 4. Interactions
 # -------------------------
 
 pair_style      lj/cut ${rc}
@@ -73,64 +89,61 @@ pair_coeff      1 1 ${eps} ${sig} ${rc}
 pair_coeff      1 2 ${eps} ${sig} ${rc}
 pair_coeff      2 2 ${eps} ${sig} ${rc}
 
+# Shift the LJ potential energy to zero at the cutoff.
 pair_modify     shift yes
 
 mass            1 ${mass}
 mass            2 ${mass}
 
 # -------------------------
-# 4. Define thermo output
+# 5. Thermodynamic output
 # -------------------------
+#
+# thermo controls how often LAMMPS prints.
+# thermo_style controls what it prints.
 
 thermo          ${thermo_every}
 thermo_style    custom step time temp pe ke etotal press density
 thermo_modify   flush yes
 
 # -------------------------
-# 5. Define dumps
+# 6. Dumps
 # -------------------------
 #
-# Syntax:
-#   dump dump-ID group-ID style N file attributes
+# dump command grammar:
+#   dump dump-ID group-ID style every file attributes
+#
+# DALL writes the full system. DG1 writes only group G1.
 
-# Write all atoms.
 dump            DALL all custom ${dump_every} ${fdump_all} id type x y z vx vy vz
 dump_modify     DALL sort id
 
-# Write only atoms in group G1.
 dump            DG1 G1 custom ${dump_every} ${fdump_g1} id type x y z
 dump_modify     DG1 sort id
 
 # -------------------------
-# 6. Initialize velocities
+# 7. Velocities and fixes
 # -------------------------
 
 velocity        all create ${temp} ${seed} mom yes rot no dist gaussian
 
-# -------------------------
-# 7. Define fixes
-# -------------------------
-#
-# Syntax:
-#   fix fix-ID group-ID style args
-#
-# A fix modifies the simulation over time.
-
 timestep        ${dt}
 
+# fix command grammar:
+#   fix fix-ID group-ID style arguments
+#
+# FNVE integrates all atoms. The commented alternative shows that
+# fixes can also be restricted to a selected group.
 fix             FNVE all nve
-#fix             FNVE G1 nve # integrate G1 only
+#fix            FNVE G1 nve
 
 # -------------------------
-# 8. Run simulation
+# 8. Run and cleanup
 # -------------------------
 
 run             ${nrun}
 
-# -------------------------
-# 9. Clean up and write final state
-# -------------------------
-
+# Remove time-dependent objects before writing the final configuration.
 unfix           FNVE
 
 undump          DALL
@@ -138,4 +151,4 @@ undump          DG1
 
 write_data      ${fdata_final}
 
-print           "Done"
+print           "Done."

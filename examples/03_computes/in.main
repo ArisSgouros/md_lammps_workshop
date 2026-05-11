@@ -1,35 +1,26 @@
 # ============================================================
-# LJ self-diffusion validation
-# State point: T* = 1.0, rho* = 0.8
+# Example 03: Computes and averaged output
 # ============================================================
 #
-# Goal:
-#   Compute the self-diffusion coefficient from the MSD:
+# Aim:
+#   Use LAMMPS computes/fixes to estimate structural and dynamical
+#   quantities for an LJ fluid at T* = 1.0 and rho* = 0.8.
 #
-#       MSD(t) = < |r_i(t) - r_i(0)|^2 >
-#       MSD(t) ~ 6 D t   at long times
-#
-#   Therefore:
-#
-#       D = slope(MSD) / 6
-#
-# Units:
-#   LJ reduced units
+# Quantities:
+#   - mean-square displacement, MSD(t)
+#   - on-the-fly diffusion estimate, D = slope(MSD)/6
+#   - radial distribution function, g(r)
 #
 # ============================================================
 
 # -------------------------
-# Basic setup
+# 1. Basic setup and parameters
 # -------------------------
 
 units           lj
 dimension       3
 boundary        p p p
 atom_style      atomic
-
-# -------------------------
-# Parameters
-# -------------------------
 
 variable        rho equal 0.8
 variable        temp equal 1.0
@@ -43,15 +34,13 @@ variable        dt equal 0.005
 variable        tdamp equal 0.5
 variable        seed equal 12345
 
-# 8 x 8 x 8 FCC unit cells = 2048 atoms
+# 8 x 8 x 8 FCC unit cells = 2048 atoms.
 variable        ncell equal 8
 
-# Run lengths
 variable        nmin equal 1000
 variable        nequil equal 20000
 variable        nprod equal 1000000
 
-# Output intervals
 variable        thermo_every equal 1000
 variable        dump_every equal 10000
 variable        msd_every equal 100
@@ -59,7 +48,6 @@ variable        rdf_every equal 1000
 variable        rdf_repeat equal 10
 variable        rdf_freq equal ${rdf_every}*${rdf_repeat}
 
-# Output files
 variable        tag string T${temp}_rho${rho}
 variable        flog string log.${tag}.lammps
 variable        fdata_init string o.data.init
@@ -71,22 +59,13 @@ variable        frdf string o.rdf.dat
 log             ${flog}
 
 # -------------------------
-# Generate FCC initial state
+# 2. Initial state
 # -------------------------
-#
-# In LJ units, for a standard lattice such as fcc,
-# the lattice scale parameter is the reduced density rho*.
-# The physical lattice spacing is chosen accordingly.
-#
-# This creates exactly 4*ncell^3 atoms.
-#
 
 lattice         fcc ${rho}
-
 region          RBOX block 0 ${ncell} 0 ${ncell} 0 ${ncell} units lattice
 create_box      1 RBOX
 create_atoms    1 box
-
 mass            1 ${mass}
 
 write_data      ${fdata_init}
@@ -104,49 +83,32 @@ print           "Number of atoms = ${natoms}"
 print           "Box lengths: Lx=${lx_box}, Ly=${ly_box}, Lz=${lz_box}"
 
 # -------------------------
-# Interactions
+# 3. Interactions and thermo output
 # -------------------------
 
 pair_style      lj/cut ${rc}
 pair_coeff      1 1 ${eps} ${sig} ${rc}
-
-# Shift potential energy to zero at the cutoff.
 pair_modify     shift yes
 
 neighbor        0.3 bin
 neigh_modify    every 1 delay 0 check yes
-
-# -------------------------
-# Thermodynamic output
-# -------------------------
 
 thermo          ${thermo_every}
 thermo_style    custom step time temp pe ke etotal press density
 thermo_modify   flush yes
 
 # -------------------------
-# Minimization
+# 4. Minimize and equilibrate
 # -------------------------
 
 print           "Stage 0: Energy minimization"
-
 min_style       fire
 minimize        1.0e-6 1.0e-8 ${nmin} 100000
 
-# -------------------------
-# Velocity assignment
-# -------------------------
-
 velocity        all create ${temp} ${seed} mom yes rot no dist gaussian
-
 timestep        ${dt}
 
-# -------------------------
-# NVT equilibration
-# -------------------------
-
 print           "Stage 1: NVT equilibration"
-
 fix             FEQ all nvt temp ${temp} ${temp} ${tdamp}
 
 dump            DEQ all custom ${dump_every} ${fdump_eq} id type x y z
@@ -158,38 +120,32 @@ unfix           FEQ
 undump          DEQ
 
 # -------------------------
-# NVE production for diffusion
+# 5. NVE production with computes
 # -------------------------
 
-print           "Stage 2: NVE production and MSD calculation"
-
+print           "Stage 2: NVE production, MSD, and RDF"
 reset_timestep  0
 
 fix             FNVE all nve
 
-# Compute the mean square displacement
+# Mean-square displacement. The com yes option removes center-of-mass drift.
 compute         CMSD all msd com yes
 
-# Write MSD to file.
 fix             FMSD all ave/time ${msd_every} 1 ${msd_every} &
                 c_CMSD[1] c_CMSD[2] c_CMSD[3] c_CMSD[4] &
                 file ${fmsd}
 
-# Store total MSD as a vector so that LAMMPS can estimate its slope.
+# Store total MSD values so LAMMPS can estimate a running slope.
 fix             FMSDV all vector ${msd_every} c_CMSD[4]
 
-# Compute the radial distribution function.
+# RDF with 200 radial bins for type 1 - type 1 correlations.
 compute         CRDF all rdf 200 1 1
 
 fix             FRDF all ave/time ${rdf_every} ${rdf_repeat} ${rdf_freq} c_CRDF[*] &
                 file ${frdf} mode vector
 
-# Time spacing between stored MSD points.
+# slope(f_FMSDV) is per stored MSD point; divide by the time spacing.
 variable        dt_msd equal ${msd_every}*${dt}
-
-# On-the-fly estimate:
-# slope(f_FMSDV) gives slope per stored point,
-# so divide by dt_msd to get d(MSD)/dt.
 variable        d_msd equal slope(f_FMSDV)/(6.0*v_dt_msd)
 
 thermo_style    custom step time temp pe ke c_CMSD[4] v_d_msd
@@ -199,6 +155,10 @@ dump            DPROD all custom ${dump_every} ${fdump_prod} id type xu yu zu
 dump_modify     DPROD sort id
 
 run             ${nprod}
+
+# -------------------------
+# 6. Cleanup
+# -------------------------
 
 unfix           FNVE
 unfix           FMSD

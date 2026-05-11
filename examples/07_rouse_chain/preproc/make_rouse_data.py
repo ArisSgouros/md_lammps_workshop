@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Generate Gaussian initial conformations for the Brownian Rouse-chain example."""
+
 import numpy as np
 
 # -------------------------

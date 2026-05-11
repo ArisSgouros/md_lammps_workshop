@@ -1,12 +1,23 @@
-# LJ free film: density profile and surface tension from pressure tensor
-# Ensemble: NVT throughout
+# ============================================================
+# Example 06: LJ free film, density profile, and surface tension
+# ============================================================
+#
+# Aim:
+#   Build a liquid slab surrounded by vapor/vacuum and estimate:
+#     - the density profile along z
+#     - the mechanical surface tension from the pressure tensor
+#
+# ============================================================
 
 units           lj
 dimension       3
 boundary        p p p
 atom_style      atomic
 
-# --- parameters ---
+# -------------------------
+# Parameters and files
+# -------------------------
+
 variable        rho_liq equal 0.8
 variable        temp equal 0.7
 variable        eps equal 1.0
@@ -17,9 +28,9 @@ variable        mass equal 1.0
 variable        dt equal 0.005
 variable        tdamp equal 0.5
 
-variable        nxy equal 10       # lateral FCC cells
-variable        nz_slab equal 10   # liquid slab thickness in FCC cells
-variable        nz_box equal 30    # total z-size in FCC cells; includes vacuum
+variable        nxy equal 10
+variable        nz_slab equal 10
+variable        nz_box equal 30
 
 variable        dz equal 0.10
 variable        nequil equal 50000
@@ -35,7 +46,6 @@ variable        gamma_every equal 100
 variable        gamma_repeat equal 100
 variable        gamma_freq equal ${gamma_every}*${gamma_repeat}
 
-# --- output files ---
 variable        tag string free_film
 variable        flog string log.${tag}.lammps
 variable        fdump_all string o.dump.all.lammpstrj
@@ -45,13 +55,16 @@ variable        fdata_final string o.data.final
 
 log             ${flog}
 
-# --- simulation box and liquid slab ---
+# -------------------------
+# Simulation box and slab
+# -------------------------
+
 lattice         fcc ${rho_liq}
 
 region          RBOX block 0 ${nxy} 0 ${nxy} 0 ${nz_box} units lattice
 create_box      1 RBOX
 
-# Slab centered in the box: z = 10 to 20 FCC cells for nz_box=30, nz_slab=10
+# Center the liquid slab in the larger z box.
 variable        zlo_slab equal 0.5*(${nz_box}-${nz_slab})
 variable        zhi_slab equal 0.5*(${nz_box}+${nz_slab})
 
@@ -60,7 +73,10 @@ create_atoms    1 region RSLAB
 
 mass            1 ${mass}
 
-# --- interactions ---
+# -------------------------
+# Interactions and output
+# -------------------------
+
 pair_style      lj/cut ${rc}
 pair_coeff      1 1 ${eps} ${sig} ${rc}
 pair_modify     shift yes
@@ -68,7 +84,6 @@ pair_modify     shift yes
 neighbor        0.3 bin
 neigh_modify    every 1 delay 0 check yes
 
-# --- output ---
 thermo          ${thermo_every}
 thermo_style    custom step temp pe ke etotal pxx pyy pzz
 thermo_modify   flush yes
@@ -76,23 +91,27 @@ thermo_modify   flush yes
 dump            DALL all custom ${dump_every} ${fdump_all} id type x y z
 dump_modify     DALL sort id
 
-# --- minimize and initialize velocities ---
 minimize        1.0e-6 1.0e-8 10000 100000
 velocity        all create ${temp} ${seed} mom yes rot no dist gaussian
 
 timestep        ${dt}
 
-# Remove any slow center-of-mass drift.
-# This helps keep the slab centered during profile averaging.
+# Keep the slab from slowly drifting during long profile averaging.
 fix             FMOM all momentum 100 linear 1 1 1
 
-# --- NVT equilibration ---
+# -------------------------
+# Equilibration
+# -------------------------
+
 fix             FNVT all nvt temp ${temp} ${temp} ${tdamp}
 
 print           "Equilibrating LJ free film"
 run             ${nequil}
 
-# --- density profile along z ---
+# -------------------------
+# Density profile along z
+# -------------------------
+
 compute         CZBIN all chunk/atom bin/1d z lower ${dz} units box
 fix             FRHO all ave/chunk ${prof_every} ${prof_repeat} ${nprof} CZBIN density/number &
                 file ${fprof_z}
@@ -100,7 +119,10 @@ run             ${nprof}
 unfix           FRHO
 uncompute       CZBIN
 
-# --- pressure tensor and surface tension ---
+# -------------------------
+# Surface tension from pressure tensor
+# -------------------------
+
 compute         CTEMP all temp
 compute         CPRESS all pressure CTEMP
 
@@ -110,9 +132,8 @@ variable        pzz equal c_CPRESS[3]
 variable        pn equal v_pzz
 variable        pt equal 0.5*(v_pxx+v_pyy)
 
-# Mechanical surface tension for a slab with two interfaces:
-# gamma = Lz/2 * [P_N - P_T]
-# Here P_N = Pzz and P_T = (Pxx+Pyy)/2.
+# For a slab with two interfaces:
+#   gamma = Lz/2 * (P_N - P_T)
 variable        gamma equal 0.5*lz*(v_pn-v_pt)
 
 fix             FGAM all ave/time ${gamma_every} ${gamma_repeat} ${gamma_freq} &
@@ -121,8 +142,12 @@ fix             FGAM all ave/time ${gamma_every} ${gamma_repeat} ${gamma_freq} &
 
 thermo_style    custom step temp pe etotal v_pxx v_pyy v_pzz v_gamma
 
-print           "Production run: density profile and surface tension"
+print           "Production run: pressure-tensor surface tension"
 run             ${ngamma}
+
+# -------------------------
+# Cleanup
+# -------------------------
 
 unfix           FGAM
 unfix           FNVT

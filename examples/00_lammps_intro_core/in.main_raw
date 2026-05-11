@@ -1,4 +1,5 @@
 # Minimal LAMMPS example
+# Same physical model as in.main, but without the didactic section structure.
 
 units           lj
 dimension       3

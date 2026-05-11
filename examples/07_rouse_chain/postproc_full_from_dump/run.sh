@@ -1,4 +1,5 @@
 #!/bin/bash
+# Analyze the Brownian Rouse-chain trajectory written by the parent example.
 python analyze_traj.py \
   --traj ../o.dump.all.lammpstrj \
   --dt 0.002 \

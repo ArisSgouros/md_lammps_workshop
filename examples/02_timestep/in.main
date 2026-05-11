@@ -1,19 +1,44 @@
-# LJ fluid: NVE timestep / energy-conservation test
+# ============================================================
+# Example 02: Timestep and NVE energy conservation
+# ============================================================
+#
+# Aim:
+#   Show that the MD timestep is a numerical parameter. In an NVE
+#   simulation, the total energy should be approximately conserved;
+#   too large a timestep produces visible energy drift or instability.
+#
+# Try changing:
+#   variable dt equal 0.001
+#   variable dt equal 0.005
+#   variable dt equal 0.02
+#   variable dt equal 0.05
+#
+# ============================================================
+
+# -------------------------
+# 1. Basic setup
+# -------------------------
 
 units           lj
 dimension       3
 boundary        p p p
 atom_style      atomic
 
-# --- parameters ---
+# -------------------------
+# 2. Parameters
+# -------------------------
+
 variable        rho equal 0.8
 variable        temp equal 1.0
+
 variable        eps equal 1.0
 variable        sig equal 1.0
 variable        rc equal 2.5
 variable        mass equal 1.0
 
-variable        dt equal 0.005      # indicative values: 0.001, 0.005, 0.02, 0.05
+# Main control variable for this example.
+variable        dt equal 0.005
+
 variable        ncell equal 8
 variable        nmin equal 10000
 variable        nrun equal 10000
@@ -22,21 +47,27 @@ variable        seed equal 12345
 variable        thermo_every equal 100
 variable        dump_every equal 100
 
-# --- output files ---
+# Include dt in the tag so that repeated runs do not overwrite logs.
 variable        tag string dt${dt}
 variable        flog string log.${tag}.lammps
 variable        fdump_all string o.dump.${tag}.lammpstrj
 
 log             ${flog}
 
-# --- initial configuration ---
+# -------------------------
+# 3. Initial FCC configuration
+# -------------------------
+
 lattice         fcc ${rho}
 region          RBOX block 0 ${ncell} 0 ${ncell} 0 ${ncell} units lattice
 create_box      1 RBOX
 create_atoms    1 box
 mass            1 ${mass}
 
-# --- LJ interactions ---
+# -------------------------
+# 4. Interactions and neighbor list
+# -------------------------
+
 pair_style      lj/cut ${rc}
 pair_coeff      1 1 ${eps} ${sig} ${rc}
 pair_modify     shift yes
@@ -44,16 +75,22 @@ pair_modify     shift yes
 neighbor        0.3 bin
 neigh_modify    every 1 delay 0 check yes
 
-# --- minimize and initialize velocities ---
+# -------------------------
+# 5. Prepare the system
+# -------------------------
+
 minimize        1.0e-6 1.0e-8 ${nmin} 100000
 velocity        all create ${temp} ${seed} mom yes rot no dist gaussian
 
-# --- NVE run ---
+# Set the timestep before measuring the initial energy.
 timestep        ${dt}
 reset_timestep  0
+
+# Evaluate initial thermodynamic quantities without advancing time.
 thermo_style    custom step time temp pe ke etotal
 run             0
 
+# Store the initial total energy and monitor drift as dE = E(t)-E(0).
 variable        e_now equal etotal
 variable        e0 equal ${e_now}
 variable        de equal etotal-v_e0
@@ -62,20 +99,26 @@ thermo          ${thermo_every}
 thermo_style    custom step time temp pe ke etotal v_de
 thermo_modify   flush yes
 
+# Optional short NVT relaxation before the NVE test.
+#fix            FNVT all nvt temp ${temp} ${temp} 0.5
+#run            5000
+#unfix          FNVT
 
-# --- NVT equilibration run (optional) ---
-#fix FNVT all nvt temp ${temp} ${temp} 0.5
-#run 5000
-#unfix FNVT
+# -------------------------
+# 6. NVE production
+# -------------------------
 
 fix             FNVE all nve
+
 dump            DALL all custom ${dump_every} ${fdump_all} id type x y z
 dump_modify     DALL sort id
 
 run             ${nrun}
 
 unfix           FNVE
+undump          DALL
 
+# Final summary printed to the log/screen.
 print           "dt = ${dt}"
 print           "duration = $(time)"
 print           "Initial etotal = ${e0}"

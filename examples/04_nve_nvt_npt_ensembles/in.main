@@ -1,8 +1,11 @@
 # ============================================================
-# Example: NVE, NVT, NPT, and fixed-LxLy PzzT demo
+# Example 04: NVE, NVT, NPT, and anisotropic barostatting
 # ============================================================
 #
 # Aim:
+#   Compare common MD ensembles using the same LJ fluid.
+#   The earlier examples already introduced setup, variables, dumps,
+#   and fixes, so comments here focus only on the ensemble changes.
 #
 # ============================================================
 
@@ -11,7 +14,10 @@ dimension       3
 boundary        p p p
 atom_style      atomic
 
-# --- parameters ---
+# -------------------------
+# Parameters and files
+# -------------------------
+
 variable        rho equal 0.8
 variable        temp_hi equal 1.0
 variable        temp_lo equal 0.2
@@ -34,7 +40,6 @@ variable        seed equal 12345
 variable        thermo_every equal 500
 variable        dump_every equal 100
 
-# --- output files ---
 variable        tag string ensembles
 variable        flog string log.${tag}.lammps
 variable        fdump_all string o.dump.all.lammpstrj
@@ -42,14 +47,16 @@ variable        fdata_final string o.data.final
 
 log             ${flog}
 
-# --- initial configuration ---
+# -------------------------
+# System construction
+# -------------------------
+
 lattice         fcc ${rho}
 region          RBOX block 0 ${ncell} 0 ${ncell} 0 ${ncell} units lattice
 create_box      1 RBOX
 create_atoms    1 box
 mass            1 ${mass}
 
-# --- interactions ---
 pair_style      lj/cut ${rc}
 pair_coeff      1 1 ${eps} ${sig} ${rc}
 pair_modify     shift yes
@@ -57,7 +64,6 @@ pair_modify     shift yes
 neighbor        0.3 bin
 neigh_modify    every 1 delay 0 check yes
 
-# --- output ---
 thermo          ${thermo_every}
 thermo_style    custom step temp pe ke etotal pxx pyy pzz density lx ly lz
 thermo_modify   flush yes
@@ -65,20 +71,16 @@ thermo_modify   flush yes
 dump            DALL all custom ${dump_every} ${fdump_all} id type x y z
 dump_modify     DALL sort id
 
-# --- minimization and velocities ---
 minimize        1.0e-6 1.0e-8 ${nmin} 100000
 velocity        all create ${temp_hi} ${seed} mom yes rot no dist gaussian
 timestep        ${dt}
 
 # ============================================================
-# 1. NVE ensemble
+# 1. NVE: constant N, V, E
 # ============================================================
-# N, V, E fixed.
-# Total energy should be approximately conserved.
-# Temperature and pressure fluctuate.
+# Energy should be conserved up to integration error.
 
 print           "Starting NVE run"
-
 run             0
 
 fix             FNVE all nve
@@ -86,11 +88,9 @@ run             ${nrun}
 unfix           FNVE
 
 # ============================================================
-# 2. NVT ensemble
+# 2. NVT: constant N, V, T
 # ============================================================
-# N, V, T fixed/controlled.
-# Energy is not conserved because the thermostat exchanges energy
-# with the system.
+# The thermostat exchanges energy with the system.
 
 print           "Starting NVT run at high temperature"
 
@@ -99,11 +99,8 @@ run             ${nrun}
 unfix           FNVT
 
 # ============================================================
-# 3. NVT ensemble (cooling)
+# 3. NVT cooling
 # ============================================================
-# N, V, T fixed/controlled.
-# Energy is not conserved because the thermostat exchanges energy
-# with the system.
 
 print           "Starting NVT cooling run"
 
@@ -112,10 +109,8 @@ run             ${nrun}
 unfix           FNVT
 
 # ============================================================
-# 4. Isotropic NPT ensemble
+# 4. Isotropic NPT: lx, ly, and lz change together
 # ============================================================
-# N, P, T fixed/controlled.
-# lx, ly, and lz change together.
 
 print           "Starting isotropic NPT run"
 
@@ -124,11 +119,9 @@ run             ${nrun}
 unfix           FNPT
 
 # ============================================================
-# 5. Fixed-LxLy PzzT ensemble
+# 5. Fixed-LxLy PzzT: only lz is barostatted
 # ============================================================
-# N, Lx, Ly, Pzz, T fixed/controlled.
-# Only lz changes.
-# Useful for films, interfaces, slabs, and confined systems.
+# Useful for slab/interface calculations when the lateral area is fixed.
 
 print           "Starting fixed-LxLy PzzT run"
 

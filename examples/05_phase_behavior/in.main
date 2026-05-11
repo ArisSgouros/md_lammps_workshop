@@ -1,23 +1,38 @@
-# Binary Lennard-Jones mixture: phase separation and RDF
+# ============================================================
+# Example 05: Binary LJ mixture and partial RDFs
+# ============================================================
+#
+# Aim:
+#   Use a simple binary Lennard-Jones mixture to illustrate how the
+#   A-B interaction strength affects mixing/demixing tendencies.
+#
+# Try changing:
+#   variable eps_ab equal 1.0
+#   variable eps_ab equal 0.5
+#
+# ============================================================
 
 units           lj
 dimension       3
 boundary        p p p
 atom_style      atomic
 
-# --- parameters ---
+# -------------------------
+# Parameters and files
+# -------------------------
+
 variable        rho equal 0.8
 variable        temp equal 1.0
 variable        eps_aa equal 1.0
 variable        eps_bb equal 1.0
-variable        eps_ab equal 1.0      # try 1.0, 0.5
+variable        eps_ab equal 1.0
 variable        sig equal 1.0
 variable        rc equal 2.5
 variable        mass equal 1.0
 
 variable        dt equal 0.005
 variable        tdamp equal 0.5
-variable        ncell equal 8       # 8^3 fcc cells = 2048 atoms
+variable        ncell equal 8
 variable        nrun equal 10000
 variable        nrdf equal 10000
 variable        seed equal 12345
@@ -28,7 +43,6 @@ variable        rdf_every equal 100
 variable        rdf_repeat equal 50
 variable        rdf_freq equal ${rdf_every}*${rdf_repeat}
 
-# --- output files ---
 variable        tag string epsAB${eps_ab}
 variable        flog string log.${tag}.lammps
 variable        fdump_all string o.dump.all.lammpstrj
@@ -37,13 +51,16 @@ variable        fdata_final string o.data.final
 
 log             ${flog}
 
-# --- generate initial mixed configuration ---
+# -------------------------
+# Mixed initial configuration
+# -------------------------
+
 lattice         fcc ${rho}
 region          RBOX block 0 ${ncell} 0 ${ncell} 0 ${ncell} units lattice
 create_box      2 RBOX
 create_atoms    1 box
 
-# Convert half of the particles to type 2.
+# Randomly convert half of the particles from type 1 to type 2.
 set             group all type/fraction 2 0.5 ${seed}
 
 mass            1 ${mass}
@@ -61,7 +78,10 @@ print           "eps_ab = ${eps_ab}"
 print           "Number of GA particles = $(count(GA))"
 print           "Number of GB particles = $(count(GB))"
 
-# --- interactions ---
+# -------------------------
+# Interactions and run setup
+# -------------------------
+
 pair_style      lj/cut ${rc}
 pair_coeff      1 1 ${eps_aa} ${sig} ${rc}
 pair_coeff      1 2 ${eps_ab} ${sig} ${rc}
@@ -71,7 +91,6 @@ pair_modify     shift yes
 neighbor        0.3 bin
 neigh_modify    every 1 delay 0 check yes
 
-# --- output ---
 thermo          ${thermo_every}
 thermo_style    custom step time temp pe ke etotal press density
 thermo_modify   flush yes
@@ -79,21 +98,19 @@ thermo_modify   flush yes
 dump            DALL all custom ${dump_every} ${fdump_all} id type x y z
 dump_modify     DALL sort id
 
-# --- minimize and assign velocities ---
 minimize        1.0e-6 1.0e-8 10000 100000
 velocity        all create ${temp} ${seed} mom yes rot no dist gaussian
 timestep        ${dt}
 
-# --- NVT simulation ---
+# -------------------------
+# NVT run and partial RDFs
+# -------------------------
+
 fix             FNVT all nvt temp ${temp} ${temp} ${tdamp}
 
 run             ${nrun}
 
-# Partial radial distribution functions:
-# g_AA(r), g_AB(r), g_BB(r)
-#
-# Output columns are approximately:
-# r, g_11, coord_11, g_12, coord_12, g_22, coord_22
+# Partial RDFs: g_AA(r), g_AB(r), and g_BB(r).
 compute         CRDF all rdf 200 1 1 1 2 2 2
 
 fix             FRDF all ave/time ${rdf_every} ${rdf_repeat} ${rdf_freq} c_CRDF[*] &
@@ -104,7 +121,6 @@ run             ${nrdf}
 unfix           FRDF
 uncompute       CRDF
 undump          DALL
-
 unfix           FNVT
 
 write_data      ${fdata_final}

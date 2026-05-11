@@ -1,75 +1,142 @@
-# Minimal LAMMPS example
-# This script reads a simple two-component Lennard-Jones system
-# and runs a very short NVE molecular dynamics simulation.
+# ============================================================
+# Example 00: Minimal LAMMPS core workflow
+# ============================================================
+#
+# Aim:
+#   Introduce the smallest complete MD workflow used throughout
+#   the workshop:
+#
+#     1. choose units and atom style
+#     2. read an initial configuration
+#     3. define the interaction model
+#     4. assign masses and velocities
+#     5. integrate the equations of motion
+#     6. write thermodynamic and trajectory output
+#
+# Command-ID convention used in the workshop:
+#   fix IDs     start with F, e.g. FNVE
+#   compute IDs start with C, e.g. CMSD
+#   dump IDs    start with D, e.g. DALL
+#   group IDs   start with G, e.g. G1
+#
+# ============================================================
+
+# -------------------------
+# 1. Global simulation setup
+# -------------------------
 
 # Use Lennard-Jones reduced units.
-# In these units, sigma = 1, epsilon = 1, mass = 1, and kB = 1 by default.
+# In LJ units, epsilon, sigma, mass, and kB are all dimensionless.
 units           lj
 
-# Perform a three-dimensional simulation.
+# Run a three-dimensional simulation.
 dimension       3
 
-# Use periodic boundary conditions in x, y, and z.
-# Particles leaving one side of the box re-enter from the opposite side.
+# Use periodic boundaries in x, y, and z.
+# Atoms leaving one side of the box re-enter from the opposite side.
 boundary        p p p
 
-# Use the simplest atom style.
-# Particles have positions, velocities, types, and masses.
-# No bonds, angles, charges, or molecular topology are included.
+# Use the simplest atom style: atoms have type, position, velocity,
+# and mass, but no bonds, angles, charges, or molecular topology.
 atom_style      atomic
 
-# Basic model, run, and output parameters.
+# -------------------------
+# 2. Parameters
+# -------------------------
+#
+# All key numerical values are stored in variables. This makes the
+# script easier to modify and keeps filenames/output names consistent.
+
+# Thermodynamic state and random seed.
 variable        temp equal 1.0
 variable        seed equal 12345
+
+# Integration and output controls.
 variable        dt equal 0.001
 variable        nrun equal 10
 variable        thermo_every equal 1
 variable        dump_every equal 1
 
+# Lennard-Jones model parameters.
 variable        eps equal 1.0
 variable        sig equal 1.0
 variable        rc equal 2.5
 variable        mass equal 1.0
 
+# File-name variables.
 variable        tag string intro_core
 variable        flog string log.${tag}.lammps
 variable        fdata_in string in.data
 variable        fdump_all string o.dump.all.lammpstrj
 
+# Redirect the LAMMPS log to an example-specific file.
 log             ${flog}
 
-# Read the initial configuration from the LAMMPS data file.
-# The file contains the simulation box, atom types, and atom coordinates.
+# -------------------------
+# 3. Read initial configuration
+# -------------------------
+
+# Read the simulation box and atom coordinates from the data file.
+# The file also contains atom types; masses are set explicitly below.
 read_data       ${fdata_in}
 
-# Use the Lennard-Jones 12-6 pair potential.
+# -------------------------
+# 4. Define interactions
+# -------------------------
+
+# Use the Lennard-Jones 12-6 potential with a finite cutoff.
 pair_style      lj/cut ${rc}
 
-# Define LJ parameters.
-# Format: pair_coeff type_i type_j epsilon sigma cutoff
+# Define pair coefficients.
+# Syntax:
+#   pair_coeff type_i type_j epsilon sigma cutoff
 pair_coeff      1 1 ${eps} ${sig} ${rc}
 pair_coeff      1 2 ${eps} ${sig} ${rc}
 pair_coeff      2 2 ${eps} ${sig} ${rc}
 
-# Set the mass of atom types 1 and 2.
+# -------------------------
+# 5. Masses and velocities
+# -------------------------
+
+# Assign masses to both atom types.
 mass            1 ${mass}
 mass            2 ${mass}
 
-# Assign initial velocities to all atoms.
+# Draw initial velocities from a Maxwell-Boltzmann distribution.
+# mom yes removes net center-of-mass momentum.
+# rot no avoids angular-momentum manipulation, which is unnecessary here.
 velocity        all create ${temp} ${seed} mom yes rot no dist gaussian
 
-# Apply time integration to all atoms using the NVE ensemble.
+# -------------------------
+# 6. Time integration
+# -------------------------
+
+# Integrate Newton's equations in the microcanonical NVE ensemble.
+# Command grammar:
+#   fix fix-ID group-ID style arguments
 fix             FNVE all nve
 
 # Set the MD timestep.
 timestep        ${dt}
 
-# Export trajectory.
+# -------------------------
+# 7. Output
+# -------------------------
+
+# Write a trajectory containing atom id, type, and wrapped coordinates.
+# Command grammar:
+#   dump dump-ID group-ID style every file attributes
+#
+# sort id makes atom order stable between frames and easier to inspect.
 dump            DALL all custom ${dump_every} ${fdump_all} id type x y z
 dump_modify     DALL sort id
 
-# Print thermodynamic information.
+# Print thermodynamic output every thermo_every steps.
 thermo          ${thermo_every}
 
-# Run the simulation.
+# -------------------------
+# 8. Run
+# -------------------------
+
+# Advance the simulation.
 run             ${nrun}

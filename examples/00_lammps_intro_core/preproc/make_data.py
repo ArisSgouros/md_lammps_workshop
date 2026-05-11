@@ -1,3 +1,5 @@
+"""Generate a small binary FCC Lennard-Jones data file for the intro examples."""
+
 import numpy as np
 
 rho = 0.8

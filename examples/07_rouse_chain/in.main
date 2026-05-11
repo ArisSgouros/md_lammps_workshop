@@ -1,15 +1,18 @@
-# Brownian Rouse-chain benchmark:
-# noninteracting Gaussian chains + overdamped Brownian dynamics
+# ============================================================
+# Example 07: Brownian Rouse-chain benchmark
+# ============================================================
 #
-# Requires:
-#   in.data
+# Aim:
+#   Simulate noninteracting Gaussian chains using overdamped
+#   Brownian dynamics and compare against Rouse-model references.
 #
-# Generate in.data using the same Python generator as before.
+# Model:
+#   - harmonic Gaussian bonds
+#   - no excluded volume
+#   - no Lennard-Jones interactions
+#   - overdamped Brownian integrator: fix brownian
 #
-# Bead types:
-#   type 1 = internal beads
-#   type 2 = first bead of chain
-#   type 3 = last bead of chain
+# ============================================================
 
 units           lj
 dimension       3
@@ -25,32 +28,22 @@ variable        bond_b equal 1.0
 variable        gamma equal 10.0
 variable        seed_bd equal 314159
 
-# Number of beads per chain.
 # Must match the generated data file.
 variable        nbead equal 8
 
-# Brownian timestep.
-# This can often be slightly larger than inertial Langevin,
-# but keep it conservative for a clean benchmark.
 variable        dt equal 0.002
 
 # Gaussian spring:
-# U = (3 kBT / 2 b^2) r^2
-#
+#   U = (3 kBT / 2 b^2) r^2
 # LAMMPS harmonic bond:
-# E = K (r-r0)^2
-#
-# Therefore:
-# K = 3 kBT / (2 b^2), r0 = 0
+#   E = K (r-r0)^2
 variable        kbond equal 3.0*${temp}/(2.0*${bond_b}*${bond_b})
 
-# Run lengths
 variable        nequil equal 20000
 variable        nprod equal 1000000
 variable        thermo_every equal 1000
 variable        dump_every equal 1000
 
-# Output files
 variable        tag string brownian_rouse
 variable        flog string log.${tag}.lammps
 variable        fdata_in string in.data
@@ -60,7 +53,7 @@ variable        fdata_final string o.data.final
 log             ${flog}
 
 # -------------------------
-# Read system
+# Read molecular system
 # -------------------------
 
 bond_style      harmonic
@@ -68,9 +61,7 @@ read_data       ${fdata_in}
 
 bond_coeff      1 ${kbond} 0.0
 
-# No excluded volume, no LJ, no interchain interactions.
-# pair_style zero defines a communication/neighbor-list cutoff,
-# but produces no pairwise forces or pairwise energies.
+# pair_style zero provides neighbor communication without pair forces.
 pair_style      zero 10.0
 pair_coeff      * * 10.0
 
@@ -106,30 +97,25 @@ print           "Expected continuum tau_R = ${taur}"
 
 timestep        ${dt}
 
-# Important:
-# No velocity initialization.
-# No fix nve.
-# No fix langevin.
-#
-# This is the actual overdamped Brownian integrator.
+# No velocity initialization and no fix nve are used: fix brownian is
+# the overdamped time integrator.
 fix             FBD all brownian ${temp} ${seed_bd} gamma_t ${gamma}
 
-# For Brownian dynamics, velocity-based temperature and kinetic energy
-# are not meaningful diagnostics.
+# Velocity-based temperature and kinetic energy are not useful diagnostics
+# for overdamped Brownian dynamics, so thermo output is kept minimal.
 thermo          ${thermo_every}
 thermo_style    custom step time pe
 thermo_modify   flush yes
 
-# Short equilibration
 run             ${nequil}
 
 # -------------------------
-# Production
+# Production trajectory
 # -------------------------
 
 reset_timestep  0
 
-# Full trajectory for multi-time-origin chain-COM MSD
+# Use unwrapped coordinates for chain-COM MSD and conformational analysis.
 dump            DALL all custom ${dump_every} ${fdump_all} id mol type xu yu zu
 dump_modify     DALL sort id
 
