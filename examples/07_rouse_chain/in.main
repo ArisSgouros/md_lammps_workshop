@@ -20,18 +20,19 @@ atom_style      molecular
 # Model parameters
 # -------------------------
 
-variable T          equal 1.0
-variable b          equal 1.0
-variable gamma      equal 10.0
+variable        temp equal 1.0
+variable        bond_b equal 1.0
+variable        gamma equal 10.0
+variable        seed_bd equal 314159
 
 # Number of beads per chain.
 # Must match the generated data file.
-variable Nbead      equal 8
+variable        nbead equal 8
 
 # Brownian timestep.
 # This can often be slightly larger than inertial Langevin,
 # but keep it conservative for a clean benchmark.
-variable dt         equal 0.002
+variable        dt equal 0.002
 
 # Gaussian spring:
 # U = (3 kBT / 2 b^2) r^2
@@ -41,22 +42,31 @@ variable dt         equal 0.002
 #
 # Therefore:
 # K = 3 kBT / (2 b^2), r0 = 0
-variable Kbond      equal 3.0*${T}/(2.0*${b}*${b})
+variable        kbond equal 3.0*${temp}/(2.0*${bond_b}*${bond_b})
 
 # Run lengths
-variable nequil      equal 20000
-variable nprod       equal 1000000
-variable thermoEvery equal 1000
-variable dumpEvery   equal 1000
+variable        nequil equal 20000
+variable        nprod equal 1000000
+variable        thermo_every equal 1000
+variable        dump_every equal 1000
+
+# Output files
+variable        tag string brownian_rouse
+variable        flog string log.${tag}.lammps
+variable        fdata_in string in.data
+variable        fdump_all string o.dump.all.lammpstrj
+variable        fdata_final string o.data.final
+
+log             ${flog}
 
 # -------------------------
 # Read system
 # -------------------------
 
 bond_style      harmonic
-read_data       in.data
+read_data       ${fdata_in}
 
-bond_coeff      1 ${Kbond} 0.0
+bond_coeff      1 ${kbond} 0.0
 
 # No excluded volume, no LJ, no interchain interactions.
 # pair_style zero defines a communication/neighbor-list cutoff,
@@ -73,22 +83,22 @@ neigh_modify    every 1 delay 0 check yes
 # Analytical reference values
 # -------------------------
 
-variable Dcm    equal ${T}/(${gamma}*${Nbead})
-variable Re2    equal (${Nbead}-1.0)*${b}*${b}
-variable Rg2    equal ((${Nbead}*${Nbead})-1.0)*${b}*${b}/(6.0*${Nbead})
-variable Rg     equal sqrt(v_Rg2)
-variable tauR   equal ${gamma}*${b}*${b}*${Nbead}*${Nbead}/(3.0*PI*PI*${T})
+variable        dcm equal ${temp}/(${gamma}*${nbead})
+variable        ree2 equal (${nbead}-1.0)*${bond_b}*${bond_b}
+variable        rg2 equal ((${nbead}*${nbead})-1.0)*${bond_b}*${bond_b}/(6.0*${nbead})
+variable        rg equal sqrt(v_rg2)
+variable        taur equal ${gamma}*${bond_b}*${bond_b}*${nbead}*${nbead}/(3.0*PI*PI*${temp})
 
-print "Brownian Rouse model"
-print "Temperature T = ${T}"
-print "Statistical segment length b = ${b}"
-print "Translational friction gamma = ${gamma}"
-print "Number of beads per chain N = ${Nbead}"
-print "Expected chain self-diffusion D_cm = ${Dcm}"
-print "Expected <Ree^2> = ${Re2}"
-print "Expected <Rg^2> = ${Rg2}"
-print "Expected Rg = ${Rg}"
-print "Expected continuum tau_R = ${tauR}"
+print           "Brownian Rouse model"
+print           "Temperature T = ${temp}"
+print           "Statistical segment length b = ${bond_b}"
+print           "Translational friction gamma = ${gamma}"
+print           "Number of beads per chain N = ${nbead}"
+print           "Expected chain self-diffusion D_cm = ${dcm}"
+print           "Expected <Ree^2> = ${ree2}"
+print           "Expected <Rg^2> = ${rg2}"
+print           "Expected Rg = ${rg}"
+print           "Expected continuum tau_R = ${taur}"
 
 # -------------------------
 # Brownian dynamics
@@ -102,11 +112,11 @@ timestep        ${dt}
 # No fix langevin.
 #
 # This is the actual overdamped Brownian integrator.
-fix             BD all brownian ${T} 314159 gamma_t ${gamma}
+fix             FBD all brownian ${temp} ${seed_bd} gamma_t ${gamma}
 
 # For Brownian dynamics, velocity-based temperature and kinetic energy
 # are not meaningful diagnostics.
-thermo          ${thermoEvery}
+thermo          ${thermo_every}
 thermo_style    custom step time pe
 thermo_modify   flush yes
 
@@ -120,9 +130,12 @@ run             ${nequil}
 reset_timestep  0
 
 # Full trajectory for multi-time-origin chain-COM MSD
-dump            DALL all custom ${dumpEvery} o.dump_all.lammpstrj id mol type xu yu zu
+dump            DALL all custom ${dump_every} ${fdump_all} id mol type xu yu zu
 dump_modify     DALL sort id
 
 run             ${nprod}
 
-write_data      o.data
+undump          DALL
+unfix           FBD
+
+write_data      ${fdata_final}

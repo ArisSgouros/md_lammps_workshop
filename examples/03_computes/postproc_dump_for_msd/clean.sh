@@ -1,2 +1,2 @@
 #!/bin/bash
-rm o.msd.dat
+rm -f log.* o.*

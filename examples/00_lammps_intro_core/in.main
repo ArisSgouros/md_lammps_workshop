@@ -2,79 +2,74 @@
 # This script reads a simple two-component Lennard-Jones system
 # and runs a very short NVE molecular dynamics simulation.
 
-
 # Use Lennard-Jones reduced units.
 # In these units, sigma = 1, epsilon = 1, mass = 1, and kB = 1 by default.
 units           lj
 
-
 # Perform a three-dimensional simulation.
 dimension       3
-
 
 # Use periodic boundary conditions in x, y, and z.
 # Particles leaving one side of the box re-enter from the opposite side.
 boundary        p p p
-
 
 # Use the simplest atom style.
 # Particles have positions, velocities, types, and masses.
 # No bonds, angles, charges, or molecular topology are included.
 atom_style      atomic
 
+# Basic model, run, and output parameters.
+variable        temp equal 1.0
+variable        seed equal 12345
+variable        dt equal 0.001
+variable        nrun equal 10
+variable        thermo_every equal 1
+variable        dump_every equal 1
 
-# Read the initial configuration from the LAMMPS data file named in.data.
+variable        eps equal 1.0
+variable        sig equal 1.0
+variable        rc equal 2.5
+variable        mass equal 1.0
+
+variable        tag string intro_core
+variable        flog string log.${tag}.lammps
+variable        fdata_in string in.data
+variable        fdump_all string o.dump.all.lammpstrj
+
+log             ${flog}
+
+# Read the initial configuration from the LAMMPS data file.
 # The file contains the simulation box, atom types, and atom coordinates.
-read_data       in.data
+read_data       ${fdata_in}
 
+# Use the Lennard-Jones 12-6 pair potential.
+pair_style      lj/cut ${rc}
 
-# Use the Lennard-Jones 12-6 pair potential with a cutoff distance of 2.5 sigma.
-pair_style      lj/cut 2.5
-
-
-# Define LJ parameters for interactions between atom type 1 and atom type 1.
+# Define LJ parameters.
 # Format: pair_coeff type_i type_j epsilon sigma cutoff
-# Here: epsilon = 1.0, sigma = 1.0, cutoff = 2.5.
-pair_coeff      1 1 1.0 1.0 2.5
-pair_coeff      1 2 1.0 1.0 2.5
-pair_coeff      2 2 1.0 1.0 2.5
+pair_coeff      1 1 ${eps} ${sig} ${rc}
+pair_coeff      1 2 ${eps} ${sig} ${rc}
+pair_coeff      2 2 ${eps} ${sig} ${rc}
 
-
-# Set the mass of atom types 1 and 2 to 1.0 in LJ reduced units.
-mass            1 1.0
-mass            2 1.0
-
+# Set the mass of atom types 1 and 2.
+mass            1 ${mass}
+mass            2 ${mass}
 
 # Assign initial velocities to all atoms.
-# Target temperature = 1.0.
-# Random seed = 12345.
-# mom yes: remove total linear momentum.
-# rot no: do not remove angular momentum.
-# dist gaussian: sample velocities from a Gaussian distribution.
-velocity        all create 1.0 12345 mom yes rot no dist gaussian
-
+velocity        all create ${temp} ${seed} mom yes rot no dist gaussian
 
 # Apply time integration to all atoms using the NVE ensemble.
-# Syntax: fix fix-ID group-ID style
-# Here:
-#   fix-ID   = 1
-#   group-ID = all
-#   style    = nve
-# NVE means constant number of particles, volume, and total energy.
-fix             1 all nve
+fix             FNVE all nve
 
+# Set the MD timestep.
+timestep        ${dt}
 
-# Set the MD timestep to 0.001 in LJ time units.
-timestep        0.001
+# Export trajectory.
+dump            DALL all custom ${dump_every} ${fdump_all} id type x y z
+dump_modify     DALL sort id
 
+# Print thermodynamic information.
+thermo          ${thermo_every}
 
-# Export trajectories
-dump            TRAJ_ALL all custom 1 o.dump.lammpstrj id type x y z
-
-
-# Print thermodynamic information every 1 timestep.
-thermo          1
-
-
-# Run the simulation for 10 MD timesteps.
-run             10
+# Run the simulation.
+run             ${nrun}

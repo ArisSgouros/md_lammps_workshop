@@ -6,69 +6,86 @@ boundary        p p p
 atom_style      atomic
 
 # --- parameters ---
-variable rho      equal 0.8
-variable T        equal 1.0
-variable epsAA    equal 1.0
-variable epsBB    equal 1.0
-variable epsAB    equal 1.0      # try 1.0, 0.5
-variable sigma    equal 1.0
-variable rc       equal 2.5
-variable dt       equal 0.005
-variable Tdamp    equal 0.5
-variable ncell    equal 8       # 10^3 fcc cells = 4000 atoms
-variable nrun     equal 10000
-variable nrdf     equal 10000
-variable seed     equal 12345
+variable        rho equal 0.8
+variable        temp equal 1.0
+variable        eps_aa equal 1.0
+variable        eps_bb equal 1.0
+variable        eps_ab equal 1.0      # try 1.0, 0.5
+variable        sig equal 1.0
+variable        rc equal 2.5
+variable        mass equal 1.0
+
+variable        dt equal 0.005
+variable        tdamp equal 0.5
+variable        ncell equal 8       # 8^3 fcc cells = 2048 atoms
+variable        nrun equal 10000
+variable        nrdf equal 10000
+variable        seed equal 12345
+
+variable        thermo_every equal 1000
+variable        dump_every equal 5000
+variable        rdf_every equal 100
+variable        rdf_repeat equal 50
+variable        rdf_freq equal ${rdf_every}*${rdf_repeat}
+
+# --- output files ---
+variable        tag string epsAB${eps_ab}
+variable        flog string log.${tag}.lammps
+variable        fdump_all string o.dump.all.lammpstrj
+variable        frdf string o.rdf.dat
+variable        fdata_final string o.data.final
+
+log             ${flog}
 
 # --- generate initial mixed configuration ---
 lattice         fcc ${rho}
-region          box block 0 ${ncell} 0 ${ncell} 0 ${ncell} units lattice
-create_box      2 box
+region          RBOX block 0 ${ncell} 0 ${ncell} 0 ${ncell} units lattice
+create_box      2 RBOX
 create_atoms    1 box
 
 # Convert half of the particles to type 2.
 set             group all type/fraction 2 0.5 ${seed}
 
-mass            1 1.0
-mass            2 1.0
+mass            1 ${mass}
+mass            2 ${mass}
 
-group           A type 1
-group           B type 2
+group           GA type 1
+group           GB type 2
 
 print           "Binary LJ mixture"
-print           "T* = ${T}"
+print           "T* = ${temp}"
 print           "rho* = ${rho}"
-print           "epsAA = ${epsAA}"
-print           "epsBB = ${epsBB}"
-print           "epsAB = ${epsAB}"
-print           "Number of A particles = $(count(A))"
-print           "Number of B particles = $(count(B))"
+print           "eps_aa = ${eps_aa}"
+print           "eps_bb = ${eps_bb}"
+print           "eps_ab = ${eps_ab}"
+print           "Number of GA particles = $(count(GA))"
+print           "Number of GB particles = $(count(GB))"
 
 # --- interactions ---
 pair_style      lj/cut ${rc}
-pair_coeff      1 1 ${epsAA} ${sigma} ${rc}
-pair_coeff      1 2 ${epsAB} ${sigma} ${rc}
-pair_coeff      2 2 ${epsBB} ${sigma} ${rc}
+pair_coeff      1 1 ${eps_aa} ${sig} ${rc}
+pair_coeff      1 2 ${eps_ab} ${sig} ${rc}
+pair_coeff      2 2 ${eps_bb} ${sig} ${rc}
 pair_modify     shift yes
 
 neighbor        0.3 bin
 neigh_modify    every 1 delay 0 check yes
 
 # --- output ---
-thermo          1000
+thermo          ${thermo_every}
 thermo_style    custom step time temp pe ke etotal press density
 thermo_modify   flush yes
 
-dump            traj all custom 5000 o.dump.lammpstrj id type x y z
-dump_modify     traj sort id
+dump            DALL all custom ${dump_every} ${fdump_all} id type x y z
+dump_modify     DALL sort id
 
 # --- minimize and assign velocities ---
 minimize        1.0e-6 1.0e-8 10000 100000
-velocity        all create ${T} ${seed} mom yes rot no dist gaussian
+velocity        all create ${temp} ${seed} mom yes rot no dist gaussian
 timestep        ${dt}
 
 # --- NVT simulation ---
-fix             NVT all nvt temp ${T} ${T} ${Tdamp}
+fix             FNVT all nvt temp ${temp} ${temp} ${tdamp}
 
 run             ${nrun}
 
@@ -77,19 +94,19 @@ run             ${nrun}
 #
 # Output columns are approximately:
 # r, g_11, coord_11, g_12, coord_12, g_22, coord_22
-compute         RDF all rdf 200 1 1 1 2 2 2
+compute         CRDF all rdf 200 1 1 1 2 2 2
 
-fix             RDFOUT all ave/time 100 50 5000 c_RDF[*] &
-                file o.rdf.dat mode vector
+fix             FRDF all ave/time ${rdf_every} ${rdf_repeat} ${rdf_freq} c_CRDF[*] &
+                file ${frdf} mode vector
 
 run             ${nrdf}
 
-unfix           RDFOUT
-uncompute       RDF
-undump          traj
+unfix           FRDF
+uncompute       CRDF
+undump          DALL
 
-unfix           NVT
+unfix           FNVT
 
-#write_data      data.after_binary_lj
+write_data      ${fdata_final}
 
 print           "Done."

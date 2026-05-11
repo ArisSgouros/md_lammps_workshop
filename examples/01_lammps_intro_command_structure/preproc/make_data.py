@@ -32,7 +32,9 @@ for i in range(ncell):
                 atoms.append((atom_id, atom_type, *pos))
                 atom_id += 1
 
-with open("in.data", "w") as f:
+out = "in.data"
+
+with open(out, "w") as f:
     f.write("Binary LJ intro data file\n\n")
     f.write(f"{len(atoms)} atoms\n\n")
     f.write("2 atom types\n\n")
@@ -48,6 +50,6 @@ with open("in.data", "w") as f:
     for atom_id, atom_type, x, y, z in atoms:
         f.write(f"{atom_id} {atom_type} {x:.8f} {y:.8f} {z:.8f}\n")
 
-print("Wrote data.lj_intro")
+print(f"Wrote {out}")
 print(f"Number of atoms: {len(atoms)}")
 print(f"Box length: {L:.6f}")

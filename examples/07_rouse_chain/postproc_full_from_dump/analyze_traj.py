@@ -525,10 +525,10 @@ def main():
     print("")
 
     print("Output files written:")
-    print("  avg_rg.dat")
-    print("  avg_ree2.dat")
-    print("  avg_cm_msd_multi_origin.dat")
-    print("  ree_autocorr.dat")
+    print("  o.avg_rg.dat")
+    print("  o.avg_ree2.dat")
+    print("  o.avg_cm_msd_multi_origin.dat")
+    print("  o.ree_autocorr.dat")
     print("")
 
 

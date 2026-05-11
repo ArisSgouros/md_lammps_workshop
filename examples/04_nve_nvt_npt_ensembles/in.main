@@ -6,51 +6,68 @@
 #
 # ============================================================
 
-
 units           lj
 dimension       3
 boundary        p p p
 atom_style      atomic
 
 # --- parameters ---
-variable rho      equal 0.8
-variable T1       equal 1.0
-variable T2       equal 0.2
-variable P1       equal 1.0
-variable P2       equal 1.5
-variable dt       equal 0.005
-variable Tdamp    equal 0.5
-variable Pdamp    equal 5.0
-variable ncell    equal 8
-variable nrun     equal 20000
-variable seed     equal 12345
+variable        rho equal 0.8
+variable        temp_hi equal 1.0
+variable        temp_lo equal 0.2
+variable        press_iso equal 1.0
+variable        press_z equal 1.5
+
+variable        eps equal 1.0
+variable        sig equal 1.0
+variable        rc equal 2.5
+variable        mass equal 1.0
+
+variable        dt equal 0.005
+variable        tdamp equal 0.5
+variable        pdamp equal 5.0
+variable        ncell equal 8
+variable        nmin equal 10000
+variable        nrun equal 20000
+variable        seed equal 12345
+
+variable        thermo_every equal 500
+variable        dump_every equal 100
+
+# --- output files ---
+variable        tag string ensembles
+variable        flog string log.${tag}.lammps
+variable        fdump_all string o.dump.all.lammpstrj
+variable        fdata_final string o.data.final
+
+log             ${flog}
 
 # --- initial configuration ---
 lattice         fcc ${rho}
-region          box block 0 ${ncell} 0 ${ncell} 0 ${ncell} units lattice
-create_box      1 box
+region          RBOX block 0 ${ncell} 0 ${ncell} 0 ${ncell} units lattice
+create_box      1 RBOX
 create_atoms    1 box
-mass            1 1.0
+mass            1 ${mass}
 
 # --- interactions ---
-pair_style      lj/cut 2.5
-pair_coeff      1 1 1.0 1.0 2.5
+pair_style      lj/cut ${rc}
+pair_coeff      1 1 ${eps} ${sig} ${rc}
 pair_modify     shift yes
 
 neighbor        0.3 bin
 neigh_modify    every 1 delay 0 check yes
 
 # --- output ---
-thermo          500
-thermo_style    custom step time temp pe ke etotal press pxx pyy pzz density vol lx ly lz
+thermo          ${thermo_every}
+thermo_style    custom step temp pe ke etotal pxx pyy pzz density lx ly lz
 thermo_modify   flush yes
 
-dump            traj all custom 100 o.dump.lammpstrj id type x y z
-dump_modify     traj sort id
+dump            DALL all custom ${dump_every} ${fdump_all} id type x y z
+dump_modify     DALL sort id
 
 # --- minimization and velocities ---
-minimize        1.0e-6 1.0e-8 10000 100000
-velocity        all create ${T1} ${seed} mom yes rot no dist gaussian
+minimize        1.0e-6 1.0e-8 ${nmin} 100000
+velocity        all create ${temp_hi} ${seed} mom yes rot no dist gaussian
 timestep        ${dt}
 
 # ============================================================
@@ -64,11 +81,9 @@ print           "Starting NVE run"
 
 run             0
 
-thermo_style    custom step time temp pe ke etotal press pxx pyy pzz density vol lx ly lz
-
-fix             NVE all nve
+fix             FNVE all nve
 run             ${nrun}
-unfix           NVE
+unfix           FNVE
 
 # ============================================================
 # 2. NVT ensemble
@@ -77,50 +92,51 @@ unfix           NVE
 # Energy is not conserved because the thermostat exchanges energy
 # with the system.
 
-print           "Starting NVT run"
+print           "Starting NVT run at high temperature"
 
-fix             NVT all nvt temp ${T1} ${T1} ${Tdamp}
+fix             FNVT all nvt temp ${temp_hi} ${temp_hi} ${tdamp}
 run             ${nrun}
-unfix           NVT
+unfix           FNVT
 
 # ============================================================
-# 2. NVT ensemble (cooling)
+# 3. NVT ensemble (cooling)
 # ============================================================
 # N, V, T fixed/controlled.
 # Energy is not conserved because the thermostat exchanges energy
 # with the system.
 
-print           "Starting NVT run"
+print           "Starting NVT cooling run"
 
-fix             NVT all nvt temp ${T2} ${T2} ${Tdamp}
+fix             FNVT all nvt temp ${temp_lo} ${temp_lo} ${tdamp}
 run             ${nrun}
-unfix           NVT
-
-
+unfix           FNVT
 
 # ============================================================
-# 3. Isotropic NPT ensemble
+# 4. Isotropic NPT ensemble
 # ============================================================
 # N, P, T fixed/controlled.
 # lx, ly, and lz change together.
 
 print           "Starting isotropic NPT run"
 
-fix             NPT all npt temp ${T2} ${T2} ${Tdamp} iso ${P1} ${P1} ${Pdamp}
+fix             FNPT all npt temp ${temp_lo} ${temp_lo} ${tdamp} iso ${press_iso} ${press_iso} ${pdamp}
 run             ${nrun}
-unfix           NPT
+unfix           FNPT
 
 # ============================================================
-# 4. Fixed-LxLy PzzT ensemble
+# 5. Fixed-LxLy PzzT ensemble
 # ============================================================
 # N, Lx, Ly, Pzz, T fixed/controlled.
 # Only lz changes.
 # Useful for films, interfaces, slabs, and confined systems.
 
-print           "Starting NLxPyyPzz run"
+print           "Starting fixed-LxLy PzzT run"
 
-fix             NPZZ all npt temp ${T2} ${T2} ${Tdamp} y ${P1} ${P1} ${Pdamp} z ${P2} ${P2} ${Pdamp}
+fix             FNPZZ all npt temp ${temp_lo} ${temp_lo} ${tdamp} z ${press_z} ${press_z} ${pdamp}
 run             ${nrun}
-unfix           NPZZ
+unfix           FNPZZ
+
+undump          DALL
+write_data      ${fdata_final}
 
 print           "Done."

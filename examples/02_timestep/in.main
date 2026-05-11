@@ -6,35 +6,47 @@ boundary        p p p
 atom_style      atomic
 
 # --- parameters ---
-variable rho    equal 0.8
-variable T      equal 1.0
-variable dt     equal 0.005      # indicative values: 0.001, 0.005, 0.02, 0.05
-variable ncell  equal 8
-variable nrun   equal 10000
-variable seed   equal 12345
+variable        rho equal 0.8
+variable        temp equal 1.0
+variable        eps equal 1.0
+variable        sig equal 1.0
+variable        rc equal 2.5
+variable        mass equal 1.0
 
-# --- simulation tag ---
-variable tag    string dt${dt}
-log             log.${tag}.lammps
+variable        dt equal 0.005      # indicative values: 0.001, 0.005, 0.02, 0.05
+variable        ncell equal 8
+variable        nmin equal 10000
+variable        nrun equal 10000
+variable        seed equal 12345
+
+variable        thermo_every equal 100
+variable        dump_every equal 100
+
+# --- output files ---
+variable        tag string dt${dt}
+variable        flog string log.${tag}.lammps
+variable        fdump_all string o.dump.${tag}.lammpstrj
+
+log             ${flog}
 
 # --- initial configuration ---
 lattice         fcc ${rho}
-region          box block 0 ${ncell} 0 ${ncell} 0 ${ncell} units lattice
-create_box      1 box
+region          RBOX block 0 ${ncell} 0 ${ncell} 0 ${ncell} units lattice
+create_box      1 RBOX
 create_atoms    1 box
-mass            1 1.0
+mass            1 ${mass}
 
 # --- LJ interactions ---
-pair_style      lj/cut 2.5
-pair_coeff      1 1 1.0 1.0 2.5
+pair_style      lj/cut ${rc}
+pair_coeff      1 1 ${eps} ${sig} ${rc}
 pair_modify     shift yes
 
 neighbor        0.3 bin
 neigh_modify    every 1 delay 0 check yes
 
 # --- minimize and initialize velocities ---
-minimize        1.0e-6 1.0e-8 10000 100000
-velocity        all create ${T} ${seed} mom yes rot no dist gaussian
+minimize        1.0e-6 1.0e-8 ${nmin} 100000
+velocity        all create ${temp} ${seed} mom yes rot no dist gaussian
 
 # --- NVE run ---
 timestep        ${dt}
@@ -42,25 +54,30 @@ reset_timestep  0
 thermo_style    custom step time temp pe ke etotal
 run             0
 
-# --- NVT equilibration run ---
-#fix EQ all nvt temp 1.0 1.0 0.5
+variable        e_now equal etotal
+variable        e0 equal ${e_now}
+variable        de equal etotal-v_e0
+
+thermo          ${thermo_every}
+thermo_style    custom step time temp pe ke etotal v_de
+thermo_modify   flush yes
+
+
+# --- NVT equilibration run (optional) ---
+#fix FNVT all nvt temp ${temp} ${temp} 0.5
 #run 5000
-#unfix EQ
+#unfix FNVT
 
-variable        Ecurrent equal etotal
-variable        E0 equal ${Ecurrent}
-variable        dE equal etotal-v_E0
-
-thermo          100
-thermo_style    custom step time temp pe ke etotal v_dE
-
-fix             1 all nve
-dump            1 all custom 100 o.dump.${tag}.lammpstrj id type x y z
+fix             FNVE all nve
+dump            DALL all custom ${dump_every} ${fdump_all} id type x y z
+dump_modify     DALL sort id
 
 run             ${nrun}
 
+unfix           FNVE
+
 print           "dt = ${dt}"
 print           "duration = $(time)"
-print           "Initial etotal = ${E0}"
-print           "Final etotal = ${Ecurrent}"
-print           "Final dE = ${dE}"
+print           "Initial etotal = ${e0}"
+print           "Final etotal = ${e_now}"
+print           "Final dE = ${de}"

@@ -18,7 +18,6 @@
 #
 # ============================================================
 
-
 # -------------------------
 # Basic setup
 # -------------------------
@@ -28,42 +27,48 @@ dimension       3
 boundary        p p p
 atom_style      atomic
 
-
 # -------------------------
 # Parameters
 # -------------------------
 
-variable rho        equal 0.8
-variable T          equal 1.0
+variable        rho equal 0.8
+variable        temp equal 1.0
 
-variable eps        equal 1.0
-variable sig        equal 1.0
-variable rc         equal 2.5
+variable        eps equal 1.0
+variable        sig equal 1.0
+variable        rc equal 2.5
+variable        mass equal 1.0
 
-variable mass       equal 1.0
-
-variable dt         equal 0.005
-variable Tdamp      equal 0.5
+variable        dt equal 0.005
+variable        tdamp equal 0.5
+variable        seed equal 12345
 
 # 8 x 8 x 8 FCC unit cells = 2048 atoms
-variable ncell      equal 8
+variable        ncell equal 8
 
 # Run lengths
-variable nmin       equal 1000
-variable nequil     equal 20000
-variable nprod      equal 1000000
+variable        nmin equal 1000
+variable        nequil equal 20000
+variable        nprod equal 1000000
 
-# Output
-variable thermoEvery equal 1000
-variable dumpEvery   equal 10000
-variable msdEvery    equal 100
-variable rdfEvery    equal 1000
+# Output intervals
+variable        thermo_every equal 1000
+variable        dump_every equal 10000
+variable        msd_every equal 100
+variable        rdf_every equal 1000
+variable        rdf_repeat equal 10
+variable        rdf_freq equal ${rdf_every}*${rdf_repeat}
 
+# Output files
+variable        tag string T${temp}_rho${rho}
+variable        flog string log.${tag}.lammps
+variable        fdata_init string o.data.init
+variable        fdump_eq string o.dump.equil.lammpstrj
+variable        fdump_prod string o.dump.prod.lammpstrj
+variable        fmsd string o.msd.dat
+variable        frdf string o.rdf.dat
 
-# --- simulation tag ---
-variable tag    string temp${T}_rho${rho}
-log             log.${tag}.lammps
-
+log             ${flog}
 
 # -------------------------
 # Generate FCC initial state
@@ -78,29 +83,25 @@ log             log.${tag}.lammps
 
 lattice         fcc ${rho}
 
-region          simbox block 0 ${ncell} 0 ${ncell} 0 ${ncell} units lattice
-create_box      1 simbox
+region          RBOX block 0 ${ncell} 0 ${ncell} 0 ${ncell} units lattice
+create_box      1 RBOX
 create_atoms    1 box
-
-#variable        mid atom id
-#set             group all mol v_mid
 
 mass            1 ${mass}
 
-write_data      o.data_init.dat
+write_data      ${fdata_init}
 
-variable        Natoms equal count(all)
-variable        Lx equal lx
-variable        Ly equal ly
-variable        Lz equal lz
+variable        natoms equal count(all)
+variable        lx_box equal lx
+variable        ly_box equal ly
+variable        lz_box equal lz
 variable        rho_actual equal count(all)/vol
 
 print           "Created LJ fluid"
 print           "Target rho* = ${rho}"
 print           "Actual rho* = ${rho_actual}"
-print           "Number of atoms = ${Natoms}"
-print           "Box lengths: Lx=${Lx}, Ly=${Ly}, Lz=${Lz}"
-
+print           "Number of atoms = ${natoms}"
+print           "Box lengths: Lx=${lx_box}, Ly=${ly_box}, Lz=${lz_box}"
 
 # -------------------------
 # Interactions
@@ -115,15 +116,13 @@ pair_modify     shift yes
 neighbor        0.3 bin
 neigh_modify    every 1 delay 0 check yes
 
-
 # -------------------------
 # Thermodynamic output
 # -------------------------
 
-thermo          ${thermoEvery}
+thermo          ${thermo_every}
 thermo_style    custom step time temp pe ke etotal press density
 thermo_modify   flush yes
-
 
 # -------------------------
 # Minimization
@@ -134,93 +133,79 @@ print           "Stage 0: Energy minimization"
 min_style       fire
 minimize        1.0e-6 1.0e-8 ${nmin} 100000
 
-
 # -------------------------
 # Velocity assignment
 # -------------------------
 
-velocity        all create ${T} 12345 mom yes rot no dist gaussian
+velocity        all create ${temp} ${seed} mom yes rot no dist gaussian
 
 timestep        ${dt}
-
 
 # -------------------------
 # NVT equilibration
 # -------------------------
-#
-# Purpose:
-#   Melt/relax the initial FCC structure and equilibrate.
-#
 
 print           "Stage 1: NVT equilibration"
 
-fix             EQ all nvt temp ${T} ${T} ${Tdamp}
+fix             FEQ all nvt temp ${temp} ${temp} ${tdamp}
 
-dump            DEQ all custom ${dumpEvery} o.dump.equil.lammpstrj id type x y z
+dump            DEQ all custom ${dump_every} ${fdump_eq} id type x y z
 dump_modify     DEQ sort id
 
 run             ${nequil}
 
-unfix           EQ
+unfix           FEQ
 undump          DEQ
-
 
 # -------------------------
 # NVE production for diffusion
 # -------------------------
-#
-# Purpose:
-#   Measure MSD without thermostat perturbing the dynamics.
-#
-# c_MSD[1] = MSD in x
-# c_MSD[2] = MSD in y
-# c_MSD[3] = MSD in z
-# c_MSD[4] = total MSD
-#
 
 print           "Stage 2: NVE production and MSD calculation"
 
 reset_timestep  0
 
-fix             PROD all nve
+fix             FNVE all nve
 
 # Compute the mean square displacement
-compute         MSD all msd com yes
+compute         CMSD all msd com yes
 
 # Write MSD to file.
-fix             MSD_OUT all ave/time ${msdEvery} 1 ${msdEvery} &
-                c_MSD[1] c_MSD[2] c_MSD[3] c_MSD[4] &
-                file o.msd.dat
+fix             FMSD all ave/time ${msd_every} 1 ${msd_every} &
+                c_CMSD[1] c_CMSD[2] c_CMSD[3] c_CMSD[4] &
+                file ${fmsd}
 
 # Store total MSD as a vector so that LAMMPS can estimate its slope.
-fix             MSD_STORE all vector ${msdEvery} c_MSD[4]
+fix             FMSDV all vector ${msd_every} c_CMSD[4]
 
-# Compute the radial distribution function
-compute         RDF all rdf 200 1 1
+# Compute the radial distribution function.
+compute         CRDF all rdf 200 1 1
 
-fix             RDFOUT all ave/time 1000 10 10000 c_RDF[*] &
-                file o.rdf.dat mode vector
+fix             FRDF all ave/time ${rdf_every} ${rdf_repeat} ${rdf_freq} c_CRDF[*] &
+                file ${frdf} mode vector
 
 # Time spacing between stored MSD points.
-variable        dt_msd equal ${msdEvery}*${dt}
+variable        dt_msd equal ${msd_every}*${dt}
 
 # On-the-fly estimate:
-# slope(f_MSD_STORE) gives slope per stored point,
+# slope(f_FMSDV) gives slope per stored point,
 # so divide by dt_msd to get d(MSD)/dt.
-variable        D_msd equal slope(f_MSD_STORE)/(6.0*v_dt_msd)
+variable        d_msd equal slope(f_FMSDV)/(6.0*v_dt_msd)
 
-thermo_style    custom step temp pe ke c_MSD[4] v_D_msd
-thermo          ${thermoEvery}
+thermo_style    custom step time temp pe ke c_CMSD[4] v_d_msd
+thermo          ${thermo_every}
 
-dump            DPROD all custom ${dumpEvery} o.dump.prod.lammpstrj id type xu yu zu
+dump            DPROD all custom ${dump_every} ${fdump_prod} id type xu yu zu
 dump_modify     DPROD sort id
 
 run             ${nprod}
 
-unfix           PROD
-unfix           MSD_OUT
-unfix           MSD_STORE
-uncompute       MSD
+unfix           FNVE
+unfix           FMSD
+unfix           FMSDV
+unfix           FRDF
+uncompute       CMSD
+uncompute       CRDF
 undump          DPROD
 
 print           "Done."

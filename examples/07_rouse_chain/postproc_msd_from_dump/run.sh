@@ -1,2 +1,2 @@
 #!/bin/bash
-../../../utilities/MsdMol/msd in_param.dat ../o.dump_all.lammpstrj 1
+../../../utilities/MsdMol/msd in_param.dat ../o.dump.all.lammpstrj 1

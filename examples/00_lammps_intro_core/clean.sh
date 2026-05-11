@@ -1,2 +1,2 @@
 #!/bin/bash
-rm log.* o.*
+rm -f log.* o.*

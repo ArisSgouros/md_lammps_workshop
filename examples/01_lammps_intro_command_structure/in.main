@@ -8,14 +8,13 @@
 #       command ID group-ID style arguments
 #
 #   Examples:
-#       group   A type 1
-#       fix     NVT all nvt temp 1.0 1.0 0.5
-#       dump    TRAJ all custom 1000 file.lammpstrj id type x y z
+#       group   GA type 1
+#       fix     FNVT all nvt temp 1.0 1.0 0.5
+#       dump    DALL all custom 1000 file.lammpstrj id type x y z
 #
 # This example reads the initial configuration from a data file.
 #
 # ============================================================
-
 
 # -------------------------
 # 1. Global simulation setup
@@ -26,8 +25,28 @@ dimension       3
 boundary        p p p
 atom_style      atomic
 
-read_data       in.data
+variable        temp equal 1.0
+variable        seed equal 12345
+variable        dt equal 0.005
+variable        nrun equal 10
+variable        thermo_every equal 1
+variable        dump_every equal 1
 
+variable        eps equal 1.0
+variable        sig equal 1.0
+variable        rc equal 2.5
+variable        mass equal 1.0
+
+variable        tag string command_structure
+variable        flog string log.${tag}.lammps
+variable        fdata_in string in.data
+variable        fdata_final string o.data.final
+variable        fdump_all string o.dump.all.lammpstrj
+variable        fdump_g1 string o.dump.g1.lammpstrj
+
+log             ${flog}
+
+read_data       ${fdata_in}
 
 # -------------------------
 # 2. Define atom groups
@@ -44,27 +63,28 @@ group           G2 type 2
 print           "Number of G1 atoms = $(count(G1))"
 print           "Number of G2 atoms = $(count(G2))"
 
-
 # -------------------------
 # 3. Define interactions
 # -------------------------
 
-pair_style      lj/cut 2.5
+pair_style      lj/cut ${rc}
 
-pair_coeff      1 1 1.0 1.0 2.5
-pair_coeff      1 2 1.0 1.0 2.5
-pair_coeff      2 2 1.0 1.0 2.5
+pair_coeff      1 1 ${eps} ${sig} ${rc}
+pair_coeff      1 2 ${eps} ${sig} ${rc}
+pair_coeff      2 2 ${eps} ${sig} ${rc}
 
 pair_modify     shift yes
 
+mass            1 ${mass}
+mass            2 ${mass}
 
 # -------------------------
 # 4. Define thermo output
 # -------------------------
 
-thermo          1
+thermo          ${thermo_every}
 thermo_style    custom step time temp pe ke etotal press density
-
+thermo_modify   flush yes
 
 # -------------------------
 # 5. Define dumps
@@ -72,25 +92,20 @@ thermo_style    custom step time temp pe ke etotal press density
 #
 # Syntax:
 #   dump dump-ID group-ID style N file attributes
-#
-# Here:
-#   TRAJ_ALL writes all atoms every 1 steps.
-#   TRAJ_A writes only atoms in group A every 1 steps.
 
-dump            TRAJ_ALL all custom 1 o.dump.all.lammpstrj id type x y z vx vy vz
-dump_modify     TRAJ_ALL sort id
+# Write all atoms.
+dump            DALL all custom ${dump_every} ${fdump_all} id type x y z vx vy vz
+dump_modify     DALL sort id
 
-dump            TRAJ_G1 G1 custom 1 o.dump.G1_only.lammpstrj id type x y z
-dump_modify     TRAJ_G1 sort id
-
+# Write only atoms in group G1.
+dump            DG1 G1 custom ${dump_every} ${fdump_g1} id type x y z
+dump_modify     DG1 sort id
 
 # -------------------------
 # 6. Initialize velocities
 # -------------------------
 
-variable        temp equal 1.0
-velocity        all create ${temp} 12345 mom yes rot no dist gaussian
-
+velocity        all create ${temp} ${seed} mom yes rot no dist gaussian
 
 # -------------------------
 # 7. Define fixes
@@ -100,30 +115,27 @@ velocity        all create ${temp} 12345 mom yes rot no dist gaussian
 #   fix fix-ID group-ID style args
 #
 # A fix modifies the simulation over time.
-# Here, NVT integrates equations of motion.
 
-timestep        0.005
+timestep        ${dt}
 
-fix             NVE all nve
-#fix             NVE G1 nve # integrate G1 only
-
+fix             FNVE all nve
+#fix             FNVE G1 nve # integrate G1 only
 
 # -------------------------
 # 8. Run simulation
 # -------------------------
 
-run             10
-
+run             ${nrun}
 
 # -------------------------
-# 10. Clean up and write final state
+# 9. Clean up and write final state
 # -------------------------
 
-unfix           NVE
+unfix           FNVE
 
-undump          TRAJ_ALL
-undump          TRAJ_G1
+undump          DALL
+undump          DG1
 
-write_data      o.data.final
+write_data      ${fdata_final}
 
 print           "Done"
