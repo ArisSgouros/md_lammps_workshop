@@ -1,3 +1,4 @@
 *Zone*
 *.bak
 *.tmp
+__pycache__
