@@ -1,0 +1,126 @@
+# ============================================================
+# Example: NVE, NVT, NPT, and fixed-LxLy PzzT demo
+# ============================================================
+#
+# Aim:
+#
+# ============================================================
+
+
+units           lj
+dimension       3
+boundary        p p p
+atom_style      atomic
+
+# --- parameters ---
+variable rho      equal 0.8
+variable T1       equal 1.0
+variable T2       equal 0.2
+variable P1       equal 1.0
+variable P2       equal 1.5
+variable dt       equal 0.005
+variable Tdamp    equal 0.5
+variable Pdamp    equal 5.0
+variable ncell    equal 8
+variable nrun     equal 20000
+variable seed     equal 12345
+
+# --- initial configuration ---
+lattice         fcc ${rho}
+region          box block 0 ${ncell} 0 ${ncell} 0 ${ncell} units lattice
+create_box      1 box
+create_atoms    1 box
+mass            1 1.0
+
+# --- interactions ---
+pair_style      lj/cut 2.5
+pair_coeff      1 1 1.0 1.0 2.5
+pair_modify     shift yes
+
+neighbor        0.3 bin
+neigh_modify    every 1 delay 0 check yes
+
+# --- output ---
+thermo          500
+thermo_style    custom step time temp pe ke etotal press pxx pyy pzz density vol lx ly lz
+thermo_modify   flush yes
+
+dump            traj all custom 100 o.dump.lammpstrj id type x y z
+dump_modify     traj sort id
+
+# --- minimization and velocities ---
+minimize        1.0e-6 1.0e-8 10000 100000
+velocity        all create ${T1} ${seed} mom yes rot no dist gaussian
+timestep        ${dt}
+
+# ============================================================
+# 1. NVE ensemble
+# ============================================================
+# N, V, E fixed.
+# Total energy should be approximately conserved.
+# Temperature and pressure fluctuate.
+
+print           "Starting NVE run"
+
+run             0
+
+thermo_style    custom step time temp pe ke etotal press pxx pyy pzz density vol lx ly lz
+
+fix             NVE all nve
+run             ${nrun}
+unfix           NVE
+
+# ============================================================
+# 2. NVT ensemble
+# ============================================================
+# N, V, T fixed/controlled.
+# Energy is not conserved because the thermostat exchanges energy
+# with the system.
+
+print           "Starting NVT run"
+
+fix             NVT all nvt temp ${T1} ${T1} ${Tdamp}
+run             ${nrun}
+unfix           NVT
+
+# ============================================================
+# 2. NVT ensemble (cooling)
+# ============================================================
+# N, V, T fixed/controlled.
+# Energy is not conserved because the thermostat exchanges energy
+# with the system.
+
+print           "Starting NVT run"
+
+fix             NVT all nvt temp ${T2} ${T2} ${Tdamp}
+run             ${nrun}
+unfix           NVT
+
+
+
+# ============================================================
+# 3. Isotropic NPT ensemble
+# ============================================================
+# N, P, T fixed/controlled.
+# lx, ly, and lz change together.
+
+print           "Starting isotropic NPT run"
+
+fix             NPT all npt temp ${T2} ${T2} ${Tdamp} iso ${P1} ${P1} ${Pdamp}
+run             ${nrun}
+unfix           NPT
+
+# ============================================================
+# 4. Fixed-LxLy PzzT ensemble
+# ============================================================
+# N, Lx, Ly, Pzz, T fixed/controlled.
+# Only lz changes.
+# Useful for films, interfaces, slabs, and confined systems.
+
+print           "Starting NLxPyyPzz run"
+
+fix             NPZZ all npt temp ${T2} ${T2} ${Tdamp} y ${P1} ${P1} ${Pdamp} z ${P2} ${P2} ${Pdamp}
+run             ${nrun}
+unfix           NPZZ
+
+print           "Done."

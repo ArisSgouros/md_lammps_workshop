@@ -1,0 +1,128 @@
+# Brownian Rouse-chain benchmark:
+# noninteracting Gaussian chains + overdamped Brownian dynamics
+#
+# Requires:
+#   in.data
+#
+# Generate in.data using the same Python generator as before.
+#
+# Bead types:
+#   type 1 = internal beads
+#   type 2 = first bead of chain
+#   type 3 = last bead of chain
+
+units           lj
+dimension       3
+boundary        p p p
+atom_style      molecular
+
+# -------------------------
+# Model parameters
+# -------------------------
+
+variable T          equal 1.0
+variable b          equal 1.0
+variable gamma      equal 10.0
+
+# Number of beads per chain.
+# Must match the generated data file.
+variable Nbead      equal 8
+
+# Brownian timestep.
+# This can often be slightly larger than inertial Langevin,
+# but keep it conservative for a clean benchmark.
+variable dt         equal 0.002
+
+# Gaussian spring:
+# U = (3 kBT / 2 b^2) r^2
+#
+# LAMMPS harmonic bond:
+# E = K (r-r0)^2
+#
+# Therefore:
+# K = 3 kBT / (2 b^2), r0 = 0
+variable Kbond      equal 3.0*${T}/(2.0*${b}*${b})
+
+# Run lengths
+variable nequil      equal 20000
+variable nprod       equal 1000000
+variable thermoEvery equal 1000
+variable dumpEvery   equal 1000
+
+# -------------------------
+# Read system
+# -------------------------
+
+bond_style      harmonic
+read_data       in.data
+
+bond_coeff      1 ${Kbond} 0.0
+
+# No excluded volume, no LJ, no interchain interactions.
+# pair_style zero defines a communication/neighbor-list cutoff,
+# but produces no pairwise forces or pairwise energies.
+pair_style      zero 10.0
+pair_coeff      * * 10.0
+
+comm_modify     cutoff 10.0
+
+neighbor        2.0 bin
+neigh_modify    every 1 delay 0 check yes
+
+# -------------------------
+# Analytical reference values
+# -------------------------
+
+variable Dcm    equal ${T}/(${gamma}*${Nbead})
+variable Re2    equal (${Nbead}-1.0)*${b}*${b}
+variable Rg2    equal ((${Nbead}*${Nbead})-1.0)*${b}*${b}/(6.0*${Nbead})
+variable Rg     equal sqrt(v_Rg2)
+variable tauR   equal ${gamma}*${b}*${b}*${Nbead}*${Nbead}/(3.0*PI*PI*${T})
+
+print "Brownian Rouse model"
+print "Temperature T = ${T}"
+print "Statistical segment length b = ${b}"
+print "Translational friction gamma = ${gamma}"
+print "Number of beads per chain N = ${Nbead}"
+print "Expected chain self-diffusion D_cm = ${Dcm}"
+print "Expected <Ree^2> = ${Re2}"
+print "Expected <Rg^2> = ${Rg2}"
+print "Expected Rg = ${Rg}"
+print "Expected continuum tau_R = ${tauR}"
+
+# -------------------------
+# Brownian dynamics
+# -------------------------
+
+timestep        ${dt}
+
+# Important:
+# No velocity initialization.
+# No fix nve.
+# No fix langevin.
+#
+# This is the actual overdamped Brownian integrator.
+fix             BD all brownian ${T} 314159 gamma_t ${gamma}
+
+# For Brownian dynamics, velocity-based temperature and kinetic energy
+# are not meaningful diagnostics.
+thermo          ${thermoEvery}
+thermo_style    custom step time pe
+thermo_modify   flush yes
+
+# Short equilibration
+run             ${nequil}
+
+# -------------------------
+# Production
+# -------------------------
+
+reset_timestep  0
+
+# Full trajectory for multi-time-origin chain-COM MSD
+dump            DALL all custom ${dumpEvery} o.dump_all.lammpstrj id mol type xu yu zu
+dump_modify     DALL sort id
+
+run             ${nprod}
+
+write_data      o.data

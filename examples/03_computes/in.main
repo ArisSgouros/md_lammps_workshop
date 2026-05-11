@@ -1,0 +1,226 @@
+# ============================================================
+# LJ self-diffusion validation
+# State point: T* = 1.0, rho* = 0.8
+# ============================================================
+#
+# Goal:
+#   Compute the self-diffusion coefficient from the MSD:
+#
+#       MSD(t) = < |r_i(t) - r_i(0)|^2 >
+#       MSD(t) ~ 6 D t   at long times
+#
+#   Therefore:
+#
+#       D = slope(MSD) / 6
+#
+# Units:
+#   LJ reduced units
+#
+# ============================================================
+
+
+# -------------------------
+# Basic setup
+# -------------------------
+
+units           lj
+dimension       3
+boundary        p p p
+atom_style      atomic
+
+
+# -------------------------
+# Parameters
+# -------------------------
+
+variable rho        equal 0.8
+variable T          equal 1.0
+
+variable eps        equal 1.0
+variable sig        equal 1.0
+variable rc         equal 2.5
+
+variable mass       equal 1.0
+
+variable dt         equal 0.005
+variable Tdamp      equal 0.5
+
+# 8 x 8 x 8 FCC unit cells = 2048 atoms
+variable ncell      equal 8
+
+# Run lengths
+variable nmin       equal 1000
+variable nequil     equal 20000
+variable nprod      equal 1000000
+
+# Output
+variable thermoEvery equal 1000
+variable dumpEvery   equal 10000
+variable msdEvery    equal 100
+variable rdfEvery    equal 1000
+
+
+# --- simulation tag ---
+variable tag    string temp${T}_rho${rho}
+log             log.${tag}.lammps
+
+
+# -------------------------
+# Generate FCC initial state
+# -------------------------
+#
+# In LJ units, for a standard lattice such as fcc,
+# the lattice scale parameter is the reduced density rho*.
+# The physical lattice spacing is chosen accordingly.
+#
+# This creates exactly 4*ncell^3 atoms.
+#
+
+lattice         fcc ${rho}
+
+region          simbox block 0 ${ncell} 0 ${ncell} 0 ${ncell} units lattice
+create_box      1 simbox
+create_atoms    1 box
+
+#variable        mid atom id
+#set             group all mol v_mid
+
+mass            1 ${mass}
+
+write_data      o.data_init.dat
+
+variable        Natoms equal count(all)
+variable        Lx equal lx
+variable        Ly equal ly
+variable        Lz equal lz
+variable        rho_actual equal count(all)/vol
+
+print           "Created LJ fluid"
+print           "Target rho* = ${rho}"
+print           "Actual rho* = ${rho_actual}"
+print           "Number of atoms = ${Natoms}"
+print           "Box lengths: Lx=${Lx}, Ly=${Ly}, Lz=${Lz}"
+
+
+# -------------------------
+# Interactions
+# -------------------------
+
+pair_style      lj/cut ${rc}
+pair_coeff      1 1 ${eps} ${sig} ${rc}
+
+# Shift potential energy to zero at the cutoff.
+pair_modify     shift yes
+
+neighbor        0.3 bin
+neigh_modify    every 1 delay 0 check yes
+
+
+# -------------------------
+# Thermodynamic output
+# -------------------------
+
+thermo          ${thermoEvery}
+thermo_style    custom step time temp pe ke etotal press density
+thermo_modify   flush yes
+
+
+# -------------------------
+# Minimization
+# -------------------------
+
+print           "Stage 0: Energy minimization"
+
+min_style       fire
+minimize        1.0e-6 1.0e-8 ${nmin} 100000
+
+
+# -------------------------
+# Velocity assignment
+# -------------------------
+
+velocity        all create ${T} 12345 mom yes rot no dist gaussian
+
+timestep        ${dt}
+
+
+# -------------------------
+# NVT equilibration
+# -------------------------
+#
+# Purpose:
+#   Melt/relax the initial FCC structure and equilibrate.
+#
+
+print           "Stage 1: NVT equilibration"
+
+fix             EQ all nvt temp ${T} ${T} ${Tdamp}
+
+dump            DEQ all custom ${dumpEvery} o.dump.equil.lammpstrj id type x y z
+dump_modify     DEQ sort id
+
+run             ${nequil}
+
+unfix           EQ
+undump          DEQ
+
+
+# -------------------------
+# NVE production for diffusion
+# -------------------------
+#
+# Purpose:
+#   Measure MSD without thermostat perturbing the dynamics.
+#
+# c_MSD[1] = MSD in x
+# c_MSD[2] = MSD in y
+# c_MSD[3] = MSD in z
+# c_MSD[4] = total MSD
+#
+
+print           "Stage 2: NVE production and MSD calculation"
+
+reset_timestep  0
+
+fix             PROD all nve
+
+# Compute the mean square displacement
+compute         MSD all msd com yes
+
+# Write MSD to file.
+fix             MSD_OUT all ave/time ${msdEvery} 1 ${msdEvery} &
+                c_MSD[1] c_MSD[2] c_MSD[3] c_MSD[4] &
+                file o.msd.dat
+
+# Store total MSD as a vector so that LAMMPS can estimate its slope.
+fix             MSD_STORE all vector ${msdEvery} c_MSD[4]
+
+# Compute the radial distribution function
+compute         RDF all rdf 200 1 1
+
+fix             RDFOUT all ave/time 1000 10 10000 c_RDF[*] &
+                file o.rdf.dat mode vector
+
+# Time spacing between stored MSD points.
+variable        dt_msd equal ${msdEvery}*${dt}
+
+# On-the-fly estimate:
+# slope(f_MSD_STORE) gives slope per stored point,
+# so divide by dt_msd to get d(MSD)/dt.
+variable        D_msd equal slope(f_MSD_STORE)/(6.0*v_dt_msd)
+
+thermo_style    custom step temp pe ke c_MSD[4] v_D_msd
+thermo          ${thermoEvery}
+
+dump            DPROD all custom ${dumpEvery} o.dump.prod.lammpstrj id type xu yu zu
+dump_modify     DPROD sort id
+
+run             ${nprod}
+
+unfix           PROD
+unfix           MSD_OUT
+unfix           MSD_STORE
+uncompute       MSD
+undump          DPROD
+
+print           "Done."

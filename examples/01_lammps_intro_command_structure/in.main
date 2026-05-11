@@ -1,0 +1,129 @@
+# ============================================================
+# Example: LAMMPS input-script structure
+# ============================================================
+#
+# Aim:
+#   Learn the basic command grammar:
+#
+#       command ID group-ID style arguments
+#
+#   Examples:
+#       group   A type 1
+#       fix     NVT all nvt temp 1.0 1.0 0.5
+#       dump    TRAJ all custom 1000 file.lammpstrj id type x y z
+#
+# This example reads the initial configuration from a data file.
+#
+# ============================================================
+
+
+# -------------------------
+# 1. Global simulation setup
+# -------------------------
+
+units           lj
+dimension       3
+boundary        p p p
+atom_style      atomic
+
+read_data       in.data
+
+
+# -------------------------
+# 2. Define atom groups
+# -------------------------
+#
+# Syntax:
+#   group group-ID style args
+#
+# The group-ID is then used by fixes, computes, dumps, velocities, etc.
+
+group           G1 type 1
+group           G2 type 2
+
+print           "Number of G1 atoms = $(count(G1))"
+print           "Number of G2 atoms = $(count(G2))"
+
+
+# -------------------------
+# 3. Define interactions
+# -------------------------
+
+pair_style      lj/cut 2.5
+
+pair_coeff      1 1 1.0 1.0 2.5
+pair_coeff      1 2 1.0 1.0 2.5
+pair_coeff      2 2 1.0 1.0 2.5
+
+pair_modify     shift yes
+
+
+# -------------------------
+# 4. Define thermo output
+# -------------------------
+
+thermo          1
+thermo_style    custom step time temp pe ke etotal press density
+
+
+# -------------------------
+# 5. Define dumps
+# -------------------------
+#
+# Syntax:
+#   dump dump-ID group-ID style N file attributes
+#
+# Here:
+#   TRAJ_ALL writes all atoms every 1 steps.
+#   TRAJ_A writes only atoms in group A every 1 steps.
+
+dump            TRAJ_ALL all custom 1 o.dump.all.lammpstrj id type x y z vx vy vz
+dump_modify     TRAJ_ALL sort id
+
+dump            TRAJ_G1 G1 custom 1 o.dump.G1_only.lammpstrj id type x y z
+dump_modify     TRAJ_G1 sort id
+
+
+# -------------------------
+# 6. Initialize velocities
+# -------------------------
+
+variable        temp equal 1.0
+velocity        all create ${temp} 12345 mom yes rot no dist gaussian
+
+
+# -------------------------
+# 7. Define fixes
+# -------------------------
+#
+# Syntax:
+#   fix fix-ID group-ID style args
+#
+# A fix modifies the simulation over time.
+# Here, NVT integrates equations of motion.
+
+timestep        0.005
+
+fix             NVE all nve
+#fix             NVE G1 nve # integrate G1 only
+
+
+# -------------------------
+# 8. Run simulation
+# -------------------------
+
+run             10
+
+
+# -------------------------
+# 10. Clean up and write final state
+# -------------------------
+
+unfix           NVE
+
+undump          TRAJ_ALL
+undump          TRAJ_G1
+
+write_data      o.data.final
+
+print           "Done"

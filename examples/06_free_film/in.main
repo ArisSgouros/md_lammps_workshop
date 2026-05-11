@@ -1,0 +1,107 @@
+# LJ free film: density profile and surface tension from pressure tensor
+# Ensemble: NVT throughout
+
+units           lj
+dimension       3
+boundary        p p p
+atom_style      atomic
+
+# --- parameters ---
+variable rho_liq  equal 0.8
+variable T        equal 0.7
+variable dt       equal 0.005
+variable Tdamp    equal 0.5
+
+variable nxy      equal 10       # lateral FCC cells
+variable nz_slab  equal 10       # liquid slab thickness in FCC cells
+variable nz_box   equal 30       # total z-size in FCC cells; includes vacuum
+
+variable dz       equal 0.10
+variable nequil   equal 50000
+variable nprof    equal 50000
+variable ngamma   equal 100000
+variable seed     equal 12345
+
+# --- simulation box and liquid slab ---
+lattice         fcc ${rho_liq}
+
+region          box  block 0 ${nxy} 0 ${nxy} 0 ${nz_box} units lattice
+create_box      1 box
+
+# Slab centered in the box: z = 10 to 20 FCC cells for nz_box=30, nz_slab=10
+variable        zlo_slab equal 0.5*(${nz_box}-${nz_slab})
+variable        zhi_slab equal 0.5*(${nz_box}+${nz_slab})
+
+region          slab block 0 ${nxy} 0 ${nxy} ${zlo_slab} ${zhi_slab} units lattice
+create_atoms    1 region slab
+
+mass            1 1.0
+
+# --- interactions ---
+pair_style      lj/cut 2.5
+pair_coeff      1 1 1.0 1.0 2.5
+pair_modify     shift yes
+
+neighbor        0.3 bin
+neigh_modify    every 1 delay 0 check yes
+
+# --- output ---
+thermo          1000
+thermo_style    custom step time temp pe ke etotal pxx pyy pzz 
+thermo_modify   flush yes
+
+dump            traj all custom 5000 o.dump.lammpstrj id type x y z
+dump_modify     traj sort id
+
+# --- minimize and initialize velocities ---
+minimize        1.0e-6 1.0e-8 10000 100000
+velocity        all create ${T} ${seed} mom yes rot no dist gaussian
+
+timestep        ${dt}
+
+# Remove any slow center-of-mass drift.
+# This helps keep the slab centered during profile averaging.
+fix             MOM all momentum 100 linear 1 1 1
+
+# --- NVT equilibration ---
+fix             NVT all nvt temp ${T} ${T} ${Tdamp}
+
+print           "Equilibrating LJ free film"
+run             ${nequil}
+
+# --- density profile along z ---
+compute         ZBIN all chunk/atom bin/1d z lower ${dz} units box
+fix             RHO all ave/chunk 100 $(v_nprof/100) ${nprof} ZBIN density/number &
+                file o.density_profile_z.dat
+run             ${nprof}
+unfix           RHO
+
+# --- pressure tensor and surface tension ---
+compute         MYTEMP all temp
+compute         MYPRESS all pressure MYTEMP
+
+variable        Pxx equal c_MYPRESS[1]
+variable        Pyy equal c_MYPRESS[2]
+variable        Pzz equal c_MYPRESS[3]
+variable        Pn  equal v_Pzz
+variable        Pt  equal 0.5*(v_Pxx+v_Pyy)
+
+# Mechanical surface tension for a slab with two interfaces:
+# gamma = Lz/2 * [P_N - P_T]
+# Here P_N = Pzz and P_T = (Pxx+Pyy)/2.
+variable        gamma equal 0.5*lz*(v_Pn-v_Pt)
+
+fix             GAMMA all ave/time 100 100 10000 &
+                v_Pxx v_Pyy v_Pzz  v_gamma &
+                file o.surface_tension_pressure_tensor.dat
+
+thermo_style    custom step time temp pe etotal v_Pxx v_Pyy v_Pzz v_gamma
+
+print           "Production run: density profile and surface tension"
+run             ${ngamma}
+
+write_data      data.after_lj_free_film
+
+print           "Done."
+print           "Surface tension estimate is in surface_tension_pressure_tensor.dat"
+print           "Density profile is in density_profile_z.dat"

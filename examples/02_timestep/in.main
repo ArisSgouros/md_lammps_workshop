@@ -1,0 +1,66 @@
+# LJ fluid: NVE timestep / energy-conservation test
+
+units           lj
+dimension       3
+boundary        p p p
+atom_style      atomic
+
+# --- parameters ---
+variable rho    equal 0.8
+variable T      equal 1.0
+variable dt     equal 0.005      # indicative values: 0.001, 0.005, 0.02, 0.05
+variable ncell  equal 8
+variable nrun   equal 10000
+variable seed   equal 12345
+
+# --- simulation tag ---
+variable tag    string dt${dt}
+log             log.${tag}.lammps
+
+# --- initial configuration ---
+lattice         fcc ${rho}
+region          box block 0 ${ncell} 0 ${ncell} 0 ${ncell} units lattice
+create_box      1 box
+create_atoms    1 box
+mass            1 1.0
+
+# --- LJ interactions ---
+pair_style      lj/cut 2.5
+pair_coeff      1 1 1.0 1.0 2.5
+pair_modify     shift yes
+
+neighbor        0.3 bin
+neigh_modify    every 1 delay 0 check yes
+
+# --- minimize and initialize velocities ---
+minimize        1.0e-6 1.0e-8 10000 100000
+velocity        all create ${T} ${seed} mom yes rot no dist gaussian
+
+# --- NVE run ---
+timestep        ${dt}
+reset_timestep  0
+thermo_style    custom step time temp pe ke etotal
+run             0
+
+# --- NVT equilibration run ---
+#fix EQ all nvt temp 1.0 1.0 0.5
+#run 5000
+#unfix EQ
+
+variable        Ecurrent equal etotal
+variable        E0 equal ${Ecurrent}
+variable        dE equal etotal-v_E0
+
+thermo          100
+thermo_style    custom step time temp pe ke etotal v_dE
+
+fix             1 all nve
+dump            1 all custom 100 o.dump.${tag}.lammpstrj id type x y z
+
+run             ${nrun}
+
+print           "dt = ${dt}"
+print           "duration = $(time)"
+print           "Initial etotal = ${E0}"
+print           "Final etotal = ${Ecurrent}"
+print           "Final dE = ${dE}"
