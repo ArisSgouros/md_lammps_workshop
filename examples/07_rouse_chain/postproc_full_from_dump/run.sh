@@ -8,4 +8,5 @@ python analyze_traj.py \
   --gamma 10.0 \
   --b 1.0 \
   --msd-fit-tmin 0 \
-  --msd-fit-tmax 200
+  --msd-fit-tmax 200 \
+  > o.log

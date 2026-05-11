@@ -25,7 +25,7 @@ variable        rho equal 0.8
 variable        temp equal 1.0
 variable        eps_aa equal 1.0
 variable        eps_bb equal 1.0
-variable        eps_ab equal 1.0
+variable        eps_ab equal 0.5
 variable        sig equal 1.0
 variable        rc equal 2.5
 variable        mass equal 1.0

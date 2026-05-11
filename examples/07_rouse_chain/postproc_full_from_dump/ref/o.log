@@ -1,0 +1,52 @@
+
+Brownian Rouse-chain analysis from one trajectory
+-------------------------------------------------
+Input trajectory                         = ../o.dump.all.lammpstrj
+Number of frames                         = 1001
+Number of chains                         = 128
+Number of beads per chain N              = 8
+Trajectory dump interval                 = 1000 timesteps
+Trajectory dump interval                 = 2.000000 time units
+
+Model parameters
+----------------
+Temperature T                            = 1.0
+Friction gamma                           = 10.0
+Statistical segment length b             = 1.0
+
+Radius of gyration
+------------------
+<Rg> averaged over chains and time        = 1.112924
+<Rg^2> averaged over chains and time      = 1.321518
+sqrt(<Rg^2>)                              = 1.149573
+Analytical <Rg^2>                         = 1.312500
+Analytical sqrt(<Rg^2>)                   = 1.145644
+
+End-to-end vector size
+----------------------
+<Ree^2> averaged over chains and time     = 7.056502
+Analytical <Ree^2>                        = 7.000000
+
+Chain-COM diffusion: multi-time-origin
+--------------------------------------
+MSD fit window                           = 0.000000 to 200.000000
+Number of MSD fit points                 = 101
+Fitted D_cm                              = 1.248653e-02
+Analytical D_cm                          = 1.250000e-02
+
+End-to-end autocorrelation
+--------------------------
+Cee(0)                                    = 1.000000
+Fitted tau_R from Cee(t)                  = 22.115996
+Number of Cee fit points                  = 16
+Fit window                                = 0.15 < Cee < 0.65
+Continuum Rouse tau_R                     = 21.615186
+Discrete-chain tau_R                      = 21.895119
+tau_R estimated from 2 Rg^2/(pi^2 D)      = 21.446747
+
+Output files written:
+  o.avg_rg.dat
+  o.avg_ree2.dat
+  o.avg_cm_msd_multi_origin.dat
+  o.ree_autocorr.dat
+

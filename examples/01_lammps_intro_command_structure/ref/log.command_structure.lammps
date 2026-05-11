@@ -1,0 +1,184 @@
+
+# Read the same two-component LJ system used in Example 00.
+read_data       ${fdata_in}
+read_data       in.data
+Reading data file ...
+  orthogonal box = (0 0 0) to (10.259856 10.259856 10.259856)
+  1 by 1 by 1 MPI processor grid
+  reading atoms ...
+  864 atoms
+  read_data CPU = 0.007 seconds
+
+# -------------------------
+# 3. Groups
+# -------------------------
+#
+# group command grammar:
+#   group group-ID style arguments
+#
+# Here, groups select atoms by atom type. The group IDs G1 and G2
+# are later used in dumps or could be used in fixes/computes.
+
+group           G1 type 1
+406 atoms in group G1
+group           G2 type 2
+458 atoms in group G2
+
+# LAMMPS variable expansion can be used inside print statements.
+print           "Number of G1 atoms = $(count(G1))"
+Number of G1 atoms = 406
+print           "Number of G2 atoms = $(count(G2))"
+Number of G2 atoms = 458
+
+# -------------------------
+# 4. Interactions
+# -------------------------
+
+pair_style      lj/cut ${rc}
+pair_style      lj/cut 2.5
+
+pair_coeff      1 1 ${eps} ${sig} ${rc}
+pair_coeff      1 1 1 ${sig} ${rc}
+pair_coeff      1 1 1 1 ${rc}
+pair_coeff      1 1 1 1 2.5
+pair_coeff      1 2 ${eps} ${sig} ${rc}
+pair_coeff      1 2 1 ${sig} ${rc}
+pair_coeff      1 2 1 1 ${rc}
+pair_coeff      1 2 1 1 2.5
+pair_coeff      2 2 ${eps} ${sig} ${rc}
+pair_coeff      2 2 1 ${sig} ${rc}
+pair_coeff      2 2 1 1 ${rc}
+pair_coeff      2 2 1 1 2.5
+
+# Shift the LJ potential energy to zero at the cutoff.
+pair_modify     shift yes
+
+mass            1 ${mass}
+mass            1 1
+mass            2 ${mass}
+mass            2 1
+
+# -------------------------
+# 5. Thermodynamic output
+# -------------------------
+#
+# thermo controls how often LAMMPS prints.
+# thermo_style controls what it prints.
+
+thermo          ${thermo_every}
+thermo          1
+thermo_style    custom step time temp pe ke etotal press density
+thermo_modify   flush yes
+
+# -------------------------
+# 6. Dumps
+# -------------------------
+#
+# dump command grammar:
+#   dump dump-ID group-ID style every file attributes
+#
+# DALL writes the full system. DG1 writes only group G1.
+
+dump            DALL all custom ${dump_every} ${fdump_all} id type x y z vx vy vz
+dump            DALL all custom 1 ${fdump_all} id type x y z vx vy vz
+dump            DALL all custom 1 o.dump.all.lammpstrj id type x y z vx vy vz
+dump_modify     DALL sort id
+
+dump            DG1 G1 custom ${dump_every} ${fdump_g1} id type x y z
+dump            DG1 G1 custom 1 ${fdump_g1} id type x y z
+dump            DG1 G1 custom 1 o.dump.g1.lammpstrj id type x y z
+dump_modify     DG1 sort id
+
+# -------------------------
+# 7. Velocities and fixes
+# -------------------------
+
+velocity        all create ${temp} ${seed} mom yes rot no dist gaussian
+velocity        all create 1 ${seed} mom yes rot no dist gaussian
+velocity        all create 1 12345 mom yes rot no dist gaussian
+
+timestep        ${dt}
+timestep        0.005
+
+# fix command grammar:
+#   fix fix-ID group-ID style arguments
+#
+# FNVE integrates all atoms. The commented alternative shows that
+# fixes can also be restricted to a selected group.
+fix             FNVE all nve
+#fix            FNVE G1 nve
+
+# -------------------------
+# 8. Run and cleanup
+# -------------------------
+
+run             ${nrun}
+run             10
+Generated 0 of 1 mixed pair_coeff terms from geometric mixing rule
+Neighbor list info ...
+  update: every = 1 steps, delay = 0 steps, check = yes
+  max neighbors/atom: 2000, page size: 100000
+  master list distance cutoff = 2.8
+  ghost atom cutoff = 2.8
+  binsize = 1.4, bins = 8 8 8
+  1 neighbor lists, perpetual/occasional/extra = 1 0 0
+  (1) pair lj/cut, perpetual
+      attributes: half, newton on
+      pair build: half/bin/atomonly/newton
+      stencil: half/bin/3d
+      bin: standard
+Per MPI rank memory allocation (min/avg/max) = 3.174 | 3.174 | 3.174 Mbytes
+   Step          Time           Temp          PotEng         KinEng         TotEng         Press         Density    
+         0   0              1             -5.9241904      1.4982639     -4.4259266     -5.4098925      0.8          
+         1   0.005          0.99906527    -5.9227968      1.4968634     -4.4259334     -5.3994725      0.8          
+         2   0.01           0.99620985    -5.9185379      1.4925852     -4.4259527     -5.3679848      0.8          
+         3   0.015          0.99128242    -5.9111873      1.4852027     -4.4259846     -5.3147941      0.8          
+         4   0.02           0.98403646    -5.9003747      1.4743463     -4.4260284     -5.2386115      0.8          
+         5   0.025          0.97413106    -5.8855895      1.4595054     -4.4260841     -5.1377907      0.8          
+         6   0.03           0.96113983    -5.8661942      1.4400411     -4.4261531     -5.0093322      0.8          
+         7   0.035          0.94455323    -5.8414237      1.41519       -4.4262337     -4.8521764      0.8          
+         8   0.04           0.92379378    -5.8104058      1.3840869     -4.4263189     -4.6655574      0.8          
+         9   0.045          0.89828979    -5.7722772      1.3458752     -4.426402      -4.4473413      0.8          
+        10   0.05           0.86757967    -5.7263246      1.2998633     -4.4264613     -4.1973493      0.8          
+Loop time of 0.026295 on 1 procs for 10 steps with 864 atoms
+
+Performance: 164289.695 tau/day, 380.300 timesteps/s, 328.579 katom-step/s
+68.4% CPU use with 1 MPI tasks x no OpenMP threads
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 0.0055756  | 0.0055756  | 0.0055756  |   0.0 | 21.20
+Neigh   | 0.0016218  | 0.0016218  | 0.0016218  |   0.0 |  6.17
+Comm    | 0.00020595 | 0.00020595 | 0.00020595 |   0.0 |  0.78
+Output  | 0.018692   | 0.018692   | 0.018692   |   0.0 | 71.08
+Modify  | 0.00011308 | 0.00011308 | 0.00011308 |   0.0 |  0.43
+Other   |            | 8.686e-05  |            |       |  0.33
+
+Nlocal:            864 ave         864 max         864 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Nghost:           2565 ave        2565 max        2565 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Neighs:          33249 ave       33249 max       33249 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+
+Total # of neighbors = 33249
+Ave neighs/atom = 38.482639
+Neighbor list builds = 1
+Dangerous builds = 0
+
+# Remove time-dependent objects before writing the final configuration.
+unfix           FNVE
+
+undump          DALL
+undump          DG1
+
+write_data      ${fdata_final}
+write_data      o.data.final
+System init for write_data ...
+Generated 0 of 1 mixed pair_coeff terms from geometric mixing rule
+WARNING: Not all mixed pair coeffs generated from mixing. Use write_data with 'pair ij' option to store all pair coeffs. (../write_data.cpp:368)
+
+print           "Done."
+Done.
+Total wall time: 0:00:00
