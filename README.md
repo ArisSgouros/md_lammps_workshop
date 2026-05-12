@@ -42,7 +42,7 @@ Main folders:
 ```text
 examples/    Runnable LAMMPS examples
 slides/      Presentation material
-utilities/   Helper scripts for setup, plotting, or analysis
+utilities/   Scripts for postprocessing atomistic trajectories
 ```
 
 ---
@@ -79,13 +79,20 @@ Each example is intended to be self-contained.
 
 ### Windows
 
-LAMMPS is available on Windows as a precompiled executable.
+LAMMPS provides precompiled Windows executables:
 
-Another practical option is to use **Windows Subsystem for Linux** and then follow the Linux/Conda route.
+<https://docs.lammps.org/Install_windows.html>
+
+A practical alternative is to use **Windows Subsystem for Linux (WSL)**. In that case, install LAMMPS through the Linux/Conda route:
+
+<https://docs.lammps.org/Install_conda.html>
 
 ### Source build
 
-LAMMPS can also be built from source. This is useful when custom packages, additional modules, or code development are required.
+LAMMPS can also be built from source. This is useful when custom packages, additional modules, or code development are required. [[https://docs.lammps.org/Install_linux.html]
+
+<https://docs.lammps.org/Build.html>
+
 
 ---
 
