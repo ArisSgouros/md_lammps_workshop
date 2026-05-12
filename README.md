@@ -89,7 +89,9 @@ A practical alternative is to use **Windows Subsystem for Linux (WSL)**. In that
 
 ### Source build
 
-LAMMPS can also be built from source. This is useful when custom packages, additional modules, or code development are required. [[https://docs.lammps.org/Install_linux.html]
+LAMMPS can also be built from source. This is useful when custom packages, additional modules, or code development are required.
+
+<https://docs.lammps.org/Install_linux.html> <br>
 
 <https://docs.lammps.org/Build.html>
 
