@@ -1,0 +1,235 @@
+# ============================================================
+# Example 09: Two-dimensional uniaxial deformation of hBN
+# ============================================================
+#
+# Aim:
+#   Equilibrate a strictly two-dimensional hBN system, estimate
+#   time-averaged reference box dimensions lx and ly, impose these
+#   dimensions as the reference configuration, and then perform a
+#   uniaxial deformation experiment.
+#
+# Notes:
+#   This example assumes an orthogonal simulation box.
+#   All atoms must have z = 0.0 in the input data file.
+#   The z direction is ignored dynamically, but its boundary must be
+#   periodic in LAMMPS two-dimensional simulations.
+#
+# ============================================================
+
+units           metal
+dimension       2
+boundary        p p p
+atom_style      full
+
+# -------------------------
+# Parameters and files
+# -------------------------
+
+variable        temp equal 1.0
+variable        press_x equal 0.0
+variable        press_y equal 0.0
+
+variable        dt equal 0.001
+variable        tdamp equal 0.1
+variable        pdamp equal 1.0
+
+variable        erate equal 0.0002
+
+variable        nmin equal 100000
+variable        ninit equal 1
+variable        nnvt equal 10000
+variable        nnpt equal 20000
+variable        nave equal 20000
+variable        ndeform equal 100000
+
+variable        seed equal 1234
+
+variable        thermo_every equal 500
+variable        dump_every equal 1000
+
+variable        tag string uniaxial
+variable        flog string log.${tag}.lammps
+variable        fdata_in string in.data
+variable        fdump_equil string o.dump.eq.lammpstrj
+variable        fdump_ref string o.dump.ref.lammpstrj
+variable        fdump_def string o.dump.def.lammpstrj
+
+log             ${flog}
+
+# -------------------------
+# System setup
+# -------------------------
+
+read_data       ${fdata_in}
+
+include         potential.mod
+
+neighbor        2.0 bin
+neigh_modify    every 1 delay 0 check yes
+
+timestep        ${dt}
+
+fix             F2D all enforce2d
+
+thermo          ${thermo_every}
+thermo_style    custom step temp etotal ebond eangle edihed pxx pyy lx ly
+thermo_modify   flush yes
+
+dump            DALL all custom ${dump_every} ${fdump_equil} id type xu yu
+dump_modify     DALL sort id
+
+# -------------------------
+# Energy minimization
+# -------------------------
+
+print           "Starting energy minimization"
+
+min_style       cg
+minimize        0.0 1.0e-9 ${nmin} ${nmin}
+
+# -------------------------
+# Initial velocities
+# -------------------------
+
+velocity        all create ${temp} ${seed} rot yes dist gaussian
+
+run             ${ninit}
+
+# ============================================================
+# 1. NVT equilibration
+# ============================================================
+
+print           "Starting NVT equilibration"
+
+fix             FNVT all nvt temp ${temp} ${temp} ${tdamp}
+
+run             ${nnvt}
+
+unfix           FNVT
+
+# ============================================================
+# 2. NPT equilibration in x and y
+# ============================================================
+
+print           "Starting NPT equilibration in x and y"
+
+fix             FNPXY all npt temp ${temp} ${temp} ${tdamp}              &
+                x ${press_x} ${press_x} ${pdamp}                        &
+                y ${press_y} ${press_y} ${pdamp}
+
+
+run             ${nnpt}
+
+unfix           FNPXY
+
+# ============================================================
+# 3. Reference box calculation
+# ============================================================
+# A further NPT run is performed.
+# The reference lx and ly are calculated as time averages over
+# nave timesteps.
+
+print           "Starting reference-box averaging run"
+
+undump          DALL
+reset_timestep  0
+
+dump            DALL all custom ${dump_every} ${fdump_ref} id type xu yu
+dump_modify     DALL sort id
+
+variable        lx_inst equal lx
+variable        ly_inst equal ly
+
+fix             FREFNPT all npt temp ${temp} ${temp} ${tdamp}            &
+                x ${press_x} ${press_x} ${pdamp}                        &
+                y ${press_y} ${press_y} ${pdamp}
+
+fix             FREFAVG all ave/time 1 ${nave} ${nave}      &
+                v_lx_inst v_ly_inst ave one
+
+
+run             ${nave}
+
+# -------------------------
+# Store reference dimensions
+# -------------------------
+# Immediate variables are used here so that the averaged values are
+# frozen before FREFAVG is removed.
+
+variable        lx_ref equal $(f_FREFAVG[1])
+variable        ly_ref equal $(f_FREFAVG[2])
+
+variable        xmid_ref equal $(0.5*(xlo+xhi))
+variable        ymid_ref equal $(0.5*(ylo+yhi))
+
+variable        xlo_ref equal $(v_xmid_ref - 0.5*v_lx_ref)
+variable        xhi_ref equal $(v_xmid_ref + 0.5*v_lx_ref)
+
+variable        ylo_ref equal $(v_ymid_ref - 0.5*v_ly_ref)
+variable        yhi_ref equal $(v_ymid_ref + 0.5*v_ly_ref)
+
+print           "Reference box:"
+print           "  lx_ref  = ${lx_ref}"
+print           "  ly_ref  = ${ly_ref}"
+print           "  xlo_ref = ${xlo_ref}"
+print           "  xhi_ref = ${xhi_ref}"
+print           "  ylo_ref = ${ylo_ref}"
+print           "  yhi_ref = ${yhi_ref}"
+
+unfix           FREFAVG
+unfix           FREFNPT
+
+# ============================================================
+# 4. Impose reference box
+# ============================================================
+# The box center is preserved.
+# Atom coordinates are remapped affinely into the reference box.
+
+print           "Imposing reference box"
+
+change_box      all x final ${xlo_ref} ${xhi_ref}                       &
+                    y final ${ylo_ref} ${yhi_ref}                           &
+                    remap units box
+
+run             0
+
+# ============================================================
+# 5. Constant-rate uniaxial deformation
+# ============================================================
+# lx is deformed at a constant engineering strain rate.
+# ly is relaxed to zero pressure during deformation.
+#
+# The strain variable is measured relative to the averaged reference lx.
+# ============================================================
+
+print           "Starting uniaxial deformation"
+
+undump          DALL
+reset_timestep  0
+
+dump            DALL all custom ${dump_every} ${fdump_def} id type xu yu
+dump_modify     DALL sort id
+
+variable        exx equal "(lx - v_lx_ref)/v_lx_ref"
+variable        eyy equal "(ly - v_ly_ref)/v_ly_ref"
+variable        exy equal "xy/v_ly_ref"
+
+thermo_style    custom step v_exx v_eyy v_exy temp etotal ebond eangle edihed     &
+                pxx pyy pxy lx ly xy
+thermo_modify   flush yes
+
+fix             FDEF all deform 1 x erate ${erate} units box remap x
+
+fix             FNPY all npt temp ${temp} ${temp} ${tdamp}               &
+                y ${press_y} ${press_y} ${pdamp}
+
+
+run             ${ndeform}
+
+unfix           F2D
+unfix           FNPY
+unfix           FDEF
+
+undump          DALL
+
+print           "Done."
