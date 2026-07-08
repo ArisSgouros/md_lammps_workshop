@@ -30,7 +30,7 @@ atom_style      full
 #   xy_shear   : shear xy, keep lx and ly fixed
 #   biaxial    : strain x and y simultaneously
 
-variable        deform_tag string x_const_y
+variable        deform_tag string xy_shear
 
 # -------------------------
 # Parameters and files
