@@ -1,0 +1,53 @@
+# ============================================================
+# Example 08: Calculate the RDF and XRD of NaCl at 0 K
+# ============================================================
+#
+# Aim:
+#   Calculate at 0K the XRD with
+#     - simulated radiation (direct method)
+#     - Fourier transforming the partial RDF (indirect method)
+#
+# ============================================================
+
+units           metal
+dimension       3
+boundary        p p p
+atom_style full
+neighbor        2.0 bin
+
+# -------------------------
+# Parameters and files
+# -------------------------
+
+variable        fdump_all string o.dump.all.lammpstrj
+variable        flog string log.xrd.lammps
+variable        fdata_in string in.data
+
+log             ${flog}
+
+# -------------------------
+# Read the datafile
+# -------------------------
+
+read_data ${fdata_in}
+
+# -------------------------
+# Interactions and output
+# -------------------------
+pair_style zero 5.0
+pair_coeff * *
+
+thermo 1
+thermo_style custom step etotal ebond eangle edihed pxx pyy pzz pxy pxz pyz lx ly lz xy
+
+dump            DALL all custom 1 ${fdump_all} id type x y z
+run             1
+undump          DALL
+
+# -------------------------
+# Calculate the XRD
+# -------------------------
+
+compute cxrd all xrd 1.5406 Na Cl 2Theta 10 100
+fix fave all ave/histo/weight 1 1 1 10 100 250 c_cxrd[1] c_cxrd[2] mode vector file o.xrd.dat
+run 0
