@@ -1,0 +1,38 @@
+# ============================================================
+# 5. Constant-rate uniaxial deformation along x
+# ============================================================
+# lx is deformed at a constant engineering strain rate.
+# ly is kept fixed; no barostat is used during deformation.
+#
+# The strain variable is measured relative to the averaged reference lx.
+# ============================================================
+
+print           "Starting uniaxial deformation along x with fixed ly"
+
+undump          DALL
+reset_timestep  0
+
+dump            DALL all custom ${dump_every} ${fdump_def} id type xu yu
+dump_modify     DALL sort id
+
+variable        exx equal "(lx - v_lx_ref)/v_lx_ref"
+variable        eyy equal "(ly - v_ly_ref)/v_ly_ref"
+variable        exy equal "xy/v_ly_ref"
+
+thermo_style    custom step v_exx v_eyy v_exy temp etotal ebond eangle edihed     &
+                pxx pyy pxy lx ly xy
+thermo_modify   flush yes
+
+fix             FDEF all deform 1 x erate ${erate} units box remap x
+
+fix             FNVT all nvt temp ${temp} ${temp} ${tdamp}
+
+run             ${ndeform}
+
+unfix           F2D
+unfix           FNVT
+unfix           FDEF
+
+undump          DALL
+
+print           "Done."

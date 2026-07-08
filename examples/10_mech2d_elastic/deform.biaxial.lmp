@@ -1,0 +1,43 @@
+# ============================================================
+# 5. Constant-rate biaxial deformation
+# ============================================================
+# lx and ly are both deformed at the same constant engineering
+# strain rate.
+#
+# No barostat is used during deformation.
+#
+# The strain variables are measured relative to the averaged
+# reference dimensions lx_ref and ly_ref.
+# ============================================================
+
+print           "Starting biaxial deformation along x and y"
+
+undump          DALL
+reset_timestep  0
+
+dump            DALL all custom ${dump_every} ${fdump_def} id type xu yu
+dump_modify     DALL sort id
+
+variable        strain_x equal "(lx - v_lx_ref)/v_lx_ref"
+variable        strain_y equal "(ly - v_ly_ref)/v_ly_ref"
+
+thermo_style    custom step v_strain_x v_strain_y temp etotal ebond      &
+                eangle edihed pxx pyy lx ly
+thermo_modify   flush yes
+
+fix             FDEF all deform 1                                      &
+                x erate ${erate}                                      &
+                y erate ${erate}                                      &
+                units box remap x
+
+fix             FNVT all nvt temp ${temp} ${temp} ${tdamp}
+
+run             ${ndeform}
+
+unfix           F2D
+unfix           FNVT
+unfix           FDEF
+
+undump          DALL
+
+print           "Done."
